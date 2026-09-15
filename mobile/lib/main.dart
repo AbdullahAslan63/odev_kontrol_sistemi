@@ -30,46 +30,61 @@ Future<void> main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  // ── Firebase başlatma ─────────────────────────────────────────────────────
-  try {
-    if (kIsWeb) {
-      await Firebase.initializeApp(options: DefaultFirebaseOptions.web);
-    } else {
-      await Firebase.initializeApp();
-    }
-  } catch (e) {
-    debugPrint('Firebase initialize warning: $e');
-  }
-
-  // Phone Auth reCAPTCHA Enterprise — SMS OTP öncesi anahtarları yükle
-  if (!kIsWeb) {
-    unawaited(SmsService.ensureRecaptchaReady());
-  }
-
-  // Crashlytics: web'de yok; debug'da kapalı (gürültüyü önle)
-  if (!kIsWeb) {
-    final crashlyticsEnabled = !kDebugMode;
-    await FirebaseCrashlytics.instance
-        .setCrashlyticsCollectionEnabled(crashlyticsEnabled);
-    FlutterError.onError = (details) {
-      FlutterError.presentError(details);
-      if (crashlyticsEnabled) {
-        FirebaseCrashlytics.instance.recordFlutterFatalError(details);
-      }
-    };
-    PlatformDispatcher.instance.onError = (error, stack) {
-      if (crashlyticsEnabled) {
-        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-      }
-      return true;
-    };
-  }
-
-  await FcmService.initialize();
+  // Firebase kısa timeout; FCM/Crashlytics ilk kareyi bekletmesin.
+  await _bootstrapFirebase();
 
   runApp(
     const ProviderScope(
       child: App(),
     ),
   );
+}
+
+Future<void> _bootstrapFirebase() async {
+  try {
+    if (kIsWeb) {
+      await Firebase.initializeApp(options: DefaultFirebaseOptions.web)
+          .timeout(const Duration(seconds: 8));
+    } else {
+      await Firebase.initializeApp()
+          .timeout(const Duration(seconds: 5));
+    }
+  } catch (e) {
+    debugPrint('Firebase initialize warning: $e');
+    return;
+  }
+
+  if (!kIsWeb && defaultTargetPlatform != TargetPlatform.iOS) {
+    unawaited(SmsService.ensureRecaptchaReady());
+  }
+
+  if (!kIsWeb) {
+    final crashlyticsEnabled = !kDebugMode;
+    try {
+      await FirebaseCrashlytics.instance
+          .setCrashlyticsCollectionEnabled(crashlyticsEnabled)
+          .timeout(const Duration(seconds: 3));
+    } catch (e) {
+      debugPrint('Crashlytics init warning: $e');
+    }
+    FlutterError.onError = (details) {
+      FlutterError.presentError(details);
+      if (crashlyticsEnabled) {
+        unawaited(
+          FirebaseCrashlytics.instance.recordFlutterFatalError(details),
+        );
+      }
+    };
+    PlatformDispatcher.instance.onError = (error, stack) {
+      if (crashlyticsEnabled) {
+        unawaited(
+          FirebaseCrashlytics.instance
+              .recordError(error, stack, fatal: true),
+        );
+      }
+      return true;
+    };
+  }
+
+  unawaited(FcmService.initialize());
 }

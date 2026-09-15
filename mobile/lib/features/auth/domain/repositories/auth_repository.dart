@@ -37,4 +37,22 @@ abstract class AuthRepository {
   Future<void> sendPasswordResetEmail(String email);
   Future<AppUser?> getUserProfile(String uid);
   Future<Map<String, dynamic>?> validateInviteCode(String code);
+
+  /// Giriş yapmış öğretmen için şifre güncelle (reauth + updatePassword).
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  });
+
+  /// Giriş yapmış veliye ek öğrenci bağla (davet kodu).
+  Future<void> linkStudentWithInviteCode({
+    required String inviteCode,
+    required String studentId,
+  });
+
+  /// Bildirim tercihlerini users/{uid} altında sakla.
+  Future<void> updateNotificationPrefs({
+    required bool pushEnabled,
+    required bool homeworkAlertsEnabled,
+  });
 }

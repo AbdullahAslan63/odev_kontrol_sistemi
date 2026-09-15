@@ -31,10 +31,14 @@ class HomeworksRepositoryImpl implements HomeworksRepository {
   }
 
   @override
-  Stream<List<HomeworkEntity>> getClassHomeworks(String classId) {
+  Stream<List<HomeworkEntity>> getClassHomeworks(String classId, {String? teacherId}) {
     if (classId.isEmpty) return Stream.value([]);
-    return _homeworksRef
-        .where('classId', isEqualTo: classId)
+    Query<Map<String, dynamic>> query =
+        _homeworksRef.where('classId', isEqualTo: classId);
+    if (teacherId != null && teacherId.isNotEmpty) {
+      query = query.where('teacherId', isEqualTo: teacherId);
+    }
+    return query
         .orderBy('dueDate', descending: true)
         .limit(AppConstants.pageSize)
         .snapshots()
@@ -45,23 +49,33 @@ class HomeworksRepositoryImpl implements HomeworksRepository {
 
   @override
   Stream<List<HomeworkAssignmentEntity>> getHomeworkAssignments(
-      String homeworkId) {
+    String homeworkId, {
+    String? teacherId,
+  }) {
     if (homeworkId.isEmpty) return Stream.value([]);
-    return _assignmentsRef
-        .where('homeworkId', isEqualTo: homeworkId)
-        .limit(AppConstants.pageSize)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
+    Query<Map<String, dynamic>> query =
+        _assignmentsRef.where('homeworkId', isEqualTo: homeworkId);
+    if (teacherId != null && teacherId.isNotEmpty) {
+      query = query.where('teacherId', isEqualTo: teacherId);
+    }
+    return query.limit(AppConstants.pageSize).snapshots().map((snapshot) =>
+        snapshot.docs
             .map((doc) => HomeworkAssignmentModel.fromFirestore(doc))
             .toList());
   }
 
   @override
   Stream<List<HomeworkAssignmentEntity>> getStudentAssignments(
-      String studentId) {
+    String studentId, {
+    String? teacherId,
+  }) {
     if (studentId.isEmpty) return Stream.value([]);
-    return _assignmentsRef
-        .where('studentId', isEqualTo: studentId)
+    Query<Map<String, dynamic>> query =
+        _assignmentsRef.where('studentId', isEqualTo: studentId);
+    if (teacherId != null && teacherId.isNotEmpty) {
+      query = query.where('teacherId', isEqualTo: teacherId);
+    }
+    return query
         .orderBy('updatedAt', descending: true)
         .limit(AppConstants.pageSize)
         .snapshots()
@@ -171,8 +185,14 @@ class HomeworksRepositoryImpl implements HomeworksRepository {
 
   @override
   Future<void> deleteHomework(String homeworkId) async {
-    final assignments =
-        await _assignmentsRef.where('homeworkId', isEqualTo: homeworkId).get();
+    Query<Map<String, dynamic>> query =
+        _assignmentsRef.where('homeworkId', isEqualTo: homeworkId);
+    final homework = await _homeworksRef.doc(homeworkId).get();
+    final teacherId = homework.data()?['teacherId'] as String?;
+    if (teacherId != null && teacherId.isNotEmpty) {
+      query = query.where('teacherId', isEqualTo: teacherId);
+    }
+    final assignments = await query.get();
     for (var i = 0; i < assignments.docs.length; i += 400) {
       final end = i + 400 > assignments.docs.length
           ? assignments.docs.length

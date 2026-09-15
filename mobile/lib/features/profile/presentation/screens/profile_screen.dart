@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,10 +10,10 @@ import '../../../../core/theme/app_sizes.dart';
 import '../../../../core/widgets/app_buttons.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../../../core/extensions/extensions.dart';
+import '../../../auth/data/repositories/auth_repository_impl.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 
 /// Eduly Profil & Ayarlar Ekranı
-/// Öğretmen ve Veli için özel özelleştirilmiş ayarlar menüsü
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
@@ -23,9 +24,100 @@ class ProfileScreen extends ConsumerStatefulWidget {
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _notificationsEnabled = true;
   bool _homeworkAlertsEnabled = true;
+  bool _prefsLoaded = false;
+  bool _savingPrefs = false;
+  List<_LinkedStudent> _linkedStudents = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadPrefsAndStudents();
+    });
+  }
+
+  Future<void> _loadPrefsAndStudents() async {
+    final user = ref.read(currentUserProvider);
+    if (user == null) return;
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection(AppConstants.colUsers)
+          .doc(user.uid)
+          .get();
+      final prefs = doc.data()?['notificationPrefs'] as Map<String, dynamic>?;
+      if (prefs != null && mounted) {
+        setState(() {
+          _notificationsEnabled = prefs['pushEnabled'] as bool? ?? true;
+          _homeworkAlertsEnabled =
+              prefs['homeworkAlertsEnabled'] as bool? ?? true;
+          _prefsLoaded = true;
+        });
+      } else if (mounted) {
+        setState(() => _prefsLoaded = true);
+      }
+
+      if (user.isParent) {
+        final profile = await FirebaseFirestore.instance
+            .collection(AppConstants.colParentProfiles)
+            .doc(user.uid)
+            .get();
+        final ids = List<String>.from(
+          profile.data()?['studentIds'] as List? ?? [],
+        );
+        final students = <_LinkedStudent>[];
+        for (final id in ids) {
+          final s = await FirebaseFirestore.instance
+              .collection(AppConstants.colStudents)
+              .doc(id)
+              .get();
+          if (s.exists) {
+            final data = s.data()!;
+            students.add(
+              _LinkedStudent(
+                id: id,
+                name: data['name'] as String? ?? 'Öğrenci',
+                schoolNumber: data['schoolNumber'] as String?,
+              ),
+            );
+          }
+        }
+        if (mounted) setState(() => _linkedStudents = students);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _prefsLoaded = true);
+    }
+  }
+
+  Future<void> _persistNotificationPrefs({
+    required bool pushEnabled,
+    required bool homeworkAlertsEnabled,
+  }) async {
+    setState(() => _savingPrefs = true);
+    try {
+      await ref.read(authRepositoryProvider).updateNotificationPrefs(
+            pushEnabled: pushEnabled,
+            homeworkAlertsEnabled: homeworkAlertsEnabled,
+          );
+      if (!mounted) return;
+      setState(() {
+        _notificationsEnabled = pushEnabled;
+        _homeworkAlertsEnabled = homeworkAlertsEnabled;
+      });
+    } on AuthException catch (e) {
+      if (mounted) context.showSnackBar(e.message, isError: true);
+    } catch (_) {
+      if (mounted) {
+        context.showSnackBar('Bildirim tercihi kaydedilemedi', isError: true);
+      }
+    } finally {
+      if (mounted) setState(() => _savingPrefs = false);
+    }
+  }
 
   void _showAddChildDialog() {
     final codeController = TextEditingController();
+    final studentIdController = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -42,7 +134,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Öğretmeninizden aldığınız sınıf davet kodunu girin:',
+              'Sınıf davet kodunu ve listeden seçtiğiniz öğrenci kimliğini girin. '
+              'Tek öğrenci kodlarında kimlik alanı boş bırakılabilir.',
               style: AppTextStyles.bodySmall,
             ),
             const SizedBox(height: 16),
@@ -50,7 +143,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               label: 'Sınıf Davet Kodu',
               hint: 'Örn: OT-A7K9M2',
               controller: codeController,
-              prefixIcon: const Icon(Icons.key_rounded, color: AppColors.parentPrimary),
+              prefixIcon: const Icon(Icons.key_rounded,
+                  color: AppColors.parentPrimary),
+            ),
+            const SizedBox(height: 12),
+            AppTextField(
+              label: 'Öğrenci ID (sınıf kodu için)',
+              hint: 'Davet ekranındaki öğrenci kimliği',
+              controller: studentIdController,
             ),
           ],
         ),
@@ -62,12 +162,60 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.parentPrimary,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
             ),
-            onPressed: () {
-              if (codeController.text.trim().isEmpty) return;
+            onPressed: () async {
+              final code = codeController.text.trim();
+              if (code.isEmpty) return;
               Navigator.pop(ctx);
-              context.showSnackBar('Davet kodu başarıyla doğrulandı ve öğrenci eklendi! 🎉');
+              try {
+                final validated = await ref
+                    .read(authRepositoryProvider)
+                    .validateInviteCode(code);
+                if (validated == null) {
+                  if (mounted) {
+                    context.showSnackBar('Davet kodu bulunamadı', isError: true);
+                  }
+                  return;
+                }
+                final type = validated['type'] as String? ?? 'student';
+                var studentId = studentIdController.text.trim();
+                if (type == 'class') {
+                  final students =
+                      validated['students'] as List<dynamic>? ?? [];
+                  if (studentId.isEmpty && students.length == 1) {
+                    final first = students.first;
+                    if (first is Map) {
+                      studentId = first['id'] as String? ?? '';
+                    }
+                  }
+                  if (studentId.isEmpty) {
+                    if (mounted) {
+                      context.showSnackBar(
+                        'Sınıf kodu için öğrenci ID gerekli',
+                        isError: true,
+                      );
+                    }
+                    return;
+                  }
+                } else {
+                  studentId = validated['studentId'] as String? ?? studentId;
+                }
+                await ref.read(authRepositoryProvider).linkStudentWithInviteCode(
+                      inviteCode: code,
+                      studentId: studentId,
+                    );
+                if (!mounted) return;
+                context.showSnackBar('Öğrenci hesabınıza bağlandı');
+                await _loadPrefsAndStudents();
+              } on AuthException catch (e) {
+                if (mounted) context.showSnackBar(e.message, isError: true);
+              } catch (_) {
+                if (mounted) {
+                  context.showSnackBar('Bağlama başarısız', isError: true);
+                }
+              }
             },
             child: Text('Ekle', style: AppTextStyles.buttonMedium),
           ),
@@ -102,7 +250,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             const SizedBox(height: 12),
             AppTextField(
               label: 'Yeni Şifre',
-              hint: 'En az 8 karakter',
+              hint: 'En az 6 karakter',
               controller: newPassController,
               isPassword: true,
             ),
@@ -116,15 +264,31 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.teacherPrimary,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
             ),
-            onPressed: () {
+            onPressed: () async {
               if (newPassController.text.length < 6) {
-                context.showSnackBar('Şifre en az 6 karakter olmalıdır', isError: true);
+                context.showSnackBar('Şifre en az 6 karakter olmalıdır',
+                    isError: true);
                 return;
               }
               Navigator.pop(ctx);
-              context.showSnackBar('Şifreniz başarıyla güncellendi! 🔒');
+              try {
+                await ref.read(authRepositoryProvider).changePassword(
+                      currentPassword: oldPassController.text,
+                      newPassword: newPassController.text,
+                    );
+                if (mounted) {
+                  context.showSnackBar('Şifreniz güncellendi');
+                }
+              } on AuthException catch (e) {
+                if (mounted) context.showSnackBar(e.message, isError: true);
+              } catch (_) {
+                if (mounted) {
+                  context.showSnackBar('Şifre güncellenemedi', isError: true);
+                }
+              }
             },
             child: Text('Güncelle', style: AppTextStyles.buttonMedium),
           ),
@@ -178,7 +342,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.info,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
             ),
             onPressed: () => Navigator.pop(ctx),
             child: Text('Okudum ve Anladım', style: AppTextStyles.buttonMedium),
@@ -213,13 +378,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.error,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
             ),
             onPressed: () async {
               Navigator.pop(ctx);
               await ref.read(authRepositoryProvider).deleteAccount();
               if (!mounted) return;
-              context.showSnackBar('Hesabınız ve profil verileriniz Firebase\'den kalıcı olarak silindi.');
+              context.showSnackBar(
+                  'Hesabınız ve profil verileriniz Firebase\'den kalıcı olarak silindi.');
               context.go('/welcome');
             },
             child: Text('Hesabımı Sil', style: AppTextStyles.buttonMedium),
@@ -252,7 +419,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           padding: const EdgeInsets.all(AppSizes.pagePadding),
           child: Column(
             children: [
-              // ── Kullanıcı Profil Kartı ────────────────────────────────────
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -285,12 +451,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            user?.name ?? (isTeacher ? 'Öğretmen Hesabı' : 'Veli Hesabı'),
+                            user?.name ??
+                                (isTeacher
+                                    ? 'Öğretmen Hesabı'
+                                    : 'Veli Hesabı'),
                             style: AppTextStyles.h4,
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            user?.email ?? 'ornek@eduly.com',
+                            user?.email ?? '',
                             style: AppTextStyles.bodySmall,
                           ),
                           const SizedBox(height: 8),
@@ -302,7 +471,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
-                              isTeacher ? '👨‍🏫 Öğretmen Hesabı' : '👨‍👩‍👧 Veli Hesabı',
+                              isTeacher ? 'Öğretmen Hesabı' : 'Veli Hesabı',
                               style: AppTextStyles.labelSmall.copyWith(
                                 color: primaryColor,
                                 fontWeight: FontWeight.bold,
@@ -316,78 +485,105 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-
-              // ── Veli Özel: Çocuk Bağlantısı ve Yeni Çocuk Ekleme ────────
               if (!isTeacher) ...[
                 _buildSettingsGroup('Öğrenci / Çocuk Bağlantıları', [
-                  ListTile(
-                    leading: const Icon(Icons.face_rounded, color: AppColors.parentPrimary),
-                    title: Text('Ahmet Yılmaz',
-                        style: AppTextStyles.h4),
-                    subtitle: const Text('8A Sınıfı • No: 456'),
-                    trailing: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.successLight,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'Bağlı',
-                        style: AppTextStyles.labelSmall.copyWith(
-                          color: AppColors.success,
-                          fontWeight: FontWeight.w700,
+                  if (_linkedStudents.isEmpty)
+                    ListTile(
+                      leading: const Icon(Icons.info_outline_rounded,
+                          color: AppColors.parentPrimary),
+                      title: Text('Henüz bağlı öğrenci yok',
+                          style: AppTextStyles.labelLarge),
+                      subtitle: const Text('Davet kodu ile ekleyin'),
+                    )
+                  else
+                    ..._linkedStudents.map(
+                      (s) => ListTile(
+                        leading: const Icon(Icons.face_rounded,
+                            color: AppColors.parentPrimary),
+                        title: Text(s.name, style: AppTextStyles.h4),
+                        subtitle: Text(
+                          s.schoolNumber != null
+                              ? 'No: ${s.schoolNumber}'
+                              : 'Bağlı öğrenci',
+                        ),
+                        trailing: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.successLight,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'Bağlı',
+                            style: AppTextStyles.labelSmall.copyWith(
+                              color: AppColors.success,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
                   const Divider(height: 1),
                   ListTile(
-                    leading: const Icon(Icons.add_circle_outline_rounded, color: AppColors.parentPrimary),
+                    leading: const Icon(Icons.add_circle_outline_rounded,
+                        color: AppColors.parentPrimary),
                     title: Text(
                       'Yeni Çocuk / Öğrenci Ekle',
                       style: AppTextStyles.labelLarge
                           .copyWith(color: AppColors.parentPrimary),
                     ),
-                    subtitle: const Text('Öğretmenden alınan sınıf kodu ile ekle'),
-                    trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.parentPrimary),
+                    subtitle:
+                        const Text('Öğretmenden alınan sınıf kodu ile ekle'),
+                    trailing: const Icon(Icons.chevron_right_rounded,
+                        color: AppColors.parentPrimary),
                     onTap: _showAddChildDialog,
                   ),
                 ]),
                 const SizedBox(height: 20),
               ],
-
-              // ── Bildirim Tercihleri ────────────────────────────────────
               _buildSettingsGroup('Bildirim Ayarları', [
                 SwitchListTile(
-                  secondary: Icon(Icons.notifications_active_rounded, color: primaryColor),
+                  secondary: Icon(Icons.notifications_active_rounded,
+                      color: primaryColor),
                   title: Text('Anlık Bildirimler',
                       style: AppTextStyles.labelLarge),
                   subtitle: const Text('Duyuru ve mesaj bildirimlerini al'),
                   value: _notificationsEnabled,
                   activeThumbColor: primaryColor,
-                  onChanged: (val) => setState(() => _notificationsEnabled = val),
+                  onChanged: !_prefsLoaded || _savingPrefs
+                      ? null
+                      : (val) => _persistNotificationPrefs(
+                            pushEnabled: val,
+                            homeworkAlertsEnabled: _homeworkAlertsEnabled,
+                          ),
                 ),
                 const Divider(height: 1),
                 SwitchListTile(
-                  secondary: Icon(Icons.assignment_turned_in_rounded, color: primaryColor),
+                  secondary: Icon(Icons.assignment_turned_in_rounded,
+                      color: primaryColor),
                   title: Text('Ödev & Deneme Uyarıları',
                       style: AppTextStyles.labelLarge),
-                  subtitle: const Text('Yaklaşan ödev ve deneme hatırlatmaları'),
+                  subtitle:
+                      const Text('Yaklaşan ödev ve deneme hatırlatmaları'),
                   value: _homeworkAlertsEnabled,
                   activeThumbColor: primaryColor,
-                  onChanged: (val) => setState(() => _homeworkAlertsEnabled = val),
+                  onChanged: !_prefsLoaded || _savingPrefs
+                      ? null
+                      : (val) => _persistNotificationPrefs(
+                            pushEnabled: _notificationsEnabled,
+                            homeworkAlertsEnabled: val,
+                          ),
                 ),
               ]),
               const SizedBox(height: 20),
-
-              // ── Güvenlik & Hesap Ayarları ──────────────────────────────
               _buildSettingsGroup('Güvenlik & Hesap', [
-                _buildSettingsTile(
-                  icon: Icons.lock_outline_rounded,
-                  title: 'Şifre Değiştir',
-                  subtitle: 'Hesap şifrenizi güncelleyin',
-                  onTap: _showChangePasswordDialog,
-                ),
+                if (isTeacher)
+                  _buildSettingsTile(
+                    icon: Icons.lock_outline_rounded,
+                    title: 'Şifre Değiştir',
+                    subtitle: 'Hesap şifrenizi güncelleyin',
+                    onTap: _showChangePasswordDialog,
+                  ),
                 _buildSettingsTile(
                   icon: Icons.privacy_tip_outlined,
                   title: 'Gizlilik Politikası & KVKK',
@@ -402,8 +598,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
               ]),
               const SizedBox(height: 32),
-
-              // ── Çıkış Yap Butonu ──────────────────────────────────────
               SecondaryButton(
                 label: 'Güvenli Çıkış Yap',
                 icon: Icons.logout_rounded,
@@ -466,4 +660,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       onTap: onTap,
     );
   }
+}
+
+class _LinkedStudent {
+  const _LinkedStudent({
+    required this.id,
+    required this.name,
+    this.schoolNumber,
+  });
+
+  final String id;
+  final String name;
+  final String? schoolNumber;
 }

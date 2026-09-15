@@ -199,29 +199,61 @@ interface TeacherPreviewRequest {
   email?: string;
 }
 
-export const getTeacherAuthPreview = onCall(async (request) => {
-  const email = ((request.data ?? {}) as TeacherPreviewRequest).email
-    ?.trim()
-    .toLowerCase();
+/**
+ * E-posta için yalnızca varlık + öğretmen mi bilgisi döner (isim/rol sızdırmaz).
+ * Basit bellek içi rate limit (instance başına) — App Check enforce Faz 8.
+ */
+const previewHits = new Map<string, {count: number; resetAt: number}>();
 
-  if (!email || !email.includes("@")) {
-    throw new HttpsError("invalid-argument", "Geçerli bir e-posta gerekir.");
+function assertPreviewRateLimit(key: string): void {
+  const now = Date.now();
+  const windowMs = 60_000;
+  const maxHits = 20;
+  const entry = previewHits.get(key);
+  if (!entry || entry.resetAt < now) {
+    previewHits.set(key, {count: 1, resetAt: now + windowMs});
+    return;
   }
-
-  const snap = await db
-    .collection("users")
-    .where("email", "==", email)
-    .limit(1)
-    .get();
-
-  if (snap.empty) {
-    return {exists: false, name: null, role: null};
+  entry.count += 1;
+  if (entry.count > maxHits) {
+    throw new HttpsError(
+      "resource-exhausted",
+      "Çok fazla deneme. Lütfen bir dakika sonra tekrar deneyin.",
+    );
   }
+}
 
-  const data = snap.docs[0].data();
-  return {
-    exists: true,
-    name: (data.name as string | undefined) ?? null,
-    role: (data.role as string | undefined) ?? null,
-  };
-});
+export const getTeacherAuthPreview = onCall(
+  {
+    // Enforce App Check later (Faz 8); keep callable usable for launch smoke.
+    consumeAppCheckToken: false,
+  },
+  async (request) => {
+    const email = ((request.data ?? {}) as TeacherPreviewRequest).email
+      ?.trim()
+      .toLowerCase();
+
+    if (!email || !email.includes("@")) {
+      throw new HttpsError("invalid-argument", "Geçerli bir e-posta gerekir.");
+    }
+
+    const rateKey = request.auth?.uid ?? request.rawRequest.ip ?? email;
+    assertPreviewRateLimit(String(rateKey));
+
+    const snap = await db
+      .collection("users")
+      .where("email", "==", email)
+      .limit(1)
+      .get();
+
+    if (snap.empty) {
+      return {exists: false, isTeacher: false};
+    }
+
+    const role = snap.docs[0].data()?.role as string | undefined;
+    return {
+      exists: true,
+      isTeacher: role === "teacher",
+    };
+  },
+);

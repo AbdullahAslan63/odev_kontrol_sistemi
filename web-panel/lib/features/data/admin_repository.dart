@@ -72,18 +72,10 @@ class AdminRepository {
     final snap = await query.get();
     final items = <TeacherSummary>[];
 
+    // N+1 count yerine denormalize alanlar; yoksa 0 (detayda sayılır).
     for (final doc in snap.docs) {
       final data = doc.data();
       final uid = doc.id;
-      final classCount = await _countForTeacher(
-        AdminConstants.colClasses,
-        uid,
-      );
-      final studentCount = await _countForTeacher(
-        AdminConstants.colStudents,
-        uid,
-      );
-
       items.add(
         TeacherSummary(
           uid: uid,
@@ -91,8 +83,8 @@ class AdminRepository {
           email: data['email'] as String? ?? '',
           isActive: data['isActive'] as bool? ?? true,
           createdAt: _parseDate(data['createdAt']),
-          classCount: classCount,
-          studentCount: studentCount,
+          classCount: data['classCount'] as int? ?? 0,
+          studentCount: data['studentCount'] as int? ?? 0,
         ),
       );
     }
@@ -125,6 +117,7 @@ class AdminRepository {
     final snap = await _firestore
         .collection(AdminConstants.colClasses)
         .where('teacherId', isEqualTo: teacherId)
+        .limit(100)
         .get();
 
     return snap.docs.map((doc) {
@@ -264,6 +257,8 @@ class AdminRepository {
     final snap = await _firestore
         .collection(AdminConstants.colUsers)
         .where('role', isEqualTo: AdminConstants.roleTeacher)
+        .orderBy('createdAt', descending: true)
+        .limit(AdminConstants.teacherPickerLimit)
         .get();
 
     final teachers = snap.docs.map((doc) {
@@ -285,56 +280,49 @@ class AdminRepository {
     required String audience,
     String? teacherId,
   }) async {
-    final uids = await _resolveTargetUids(audience: audience, teacherId: teacherId);
-    return uids.length;
-  }
-
-  Future<Set<String>> _resolveTargetUids({
-    required String audience,
-    String? teacherId,
-  }) async {
-    final uids = <String>{};
-
     switch (audience) {
       case 'all_teachers':
-        final snap = await _firestore
+        final r = await _firestore
             .collection(AdminConstants.colUsers)
             .where('role', isEqualTo: AdminConstants.roleTeacher)
+            .count()
             .get();
-        uids.addAll(snap.docs.map((d) => d.id));
+        return r.count ?? 0;
       case 'all_parents':
-        final snap = await _firestore
+        final r = await _firestore
             .collection(AdminConstants.colUsers)
             .where('role', isEqualTo: AdminConstants.roleParent)
+            .count()
             .get();
-        uids.addAll(snap.docs.map((d) => d.id));
+        return r.count ?? 0;
       case 'all_users':
-        final teachers = await _firestore
+        final t = await _firestore
             .collection(AdminConstants.colUsers)
             .where('role', isEqualTo: AdminConstants.roleTeacher)
+            .count()
             .get();
-        final parents = await _firestore
+        final p = await _firestore
             .collection(AdminConstants.colUsers)
             .where('role', isEqualTo: AdminConstants.roleParent)
+            .count()
             .get();
-        uids.addAll(teachers.docs.map((d) => d.id));
-        uids.addAll(parents.docs.map((d) => d.id));
+        return (t.count ?? 0) + (p.count ?? 0);
       case 'parents_of_teacher':
-        if (teacherId == null) break;
-        uids.addAll(await _parentIdsForTeacher(teacherId));
       case 'teacher_and_parents_of_teacher':
-        if (teacherId == null) break;
-        uids.add(teacherId);
-        uids.addAll(await _parentIdsForTeacher(teacherId));
+        if (teacherId == null) return 0;
+        final parents = await _parentIdsForTeacher(teacherId);
+        final base = parents.length;
+        return audience == 'teacher_and_parents_of_teacher' ? base + 1 : base;
+      default:
+        return 0;
     }
-
-    return uids;
   }
 
   Future<Set<String>> _parentIdsForTeacher(String teacherId) async {
     final snap = await _firestore
         .collection(AdminConstants.colStudents)
         .where('teacherId', isEqualTo: teacherId)
+        .limit(500)
         .get();
     final parentIds = <String>{};
     for (final doc in snap.docs) {

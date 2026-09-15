@@ -306,6 +306,17 @@ class _CreateHomeworkScreenState extends ConsumerState<CreateHomeworkScreen> {
                                 content: Text('Ödev başarıyla oluşturuldu!')),
                           );
                           context.pop();
+                        } else if (context.mounted && !success) {
+                          final err = ref.read(homeworkNotifierProvider).error;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                err?.toString().replaceFirst(
+                                        RegExp(r'^Exception: '), '') ??
+                                    'Ödev oluşturulamadı.',
+                              ),
+                            ),
+                          );
                         }
                       }
                     },

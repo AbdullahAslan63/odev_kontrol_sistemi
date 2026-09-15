@@ -50,11 +50,13 @@ android {
 
     buildTypes {
         release {
-            if (keystorePropertiesFile.exists()) {
-                signingConfig = signingConfigs.getByName("release")
-            } else {
-                signingConfig = signingConfigs.getByName("debug")
+            // Lansman: debug imza ile release paket üretilmesin.
+            if (!keystorePropertiesFile.exists()) {
+                throw GradleException(
+                    "Release build requires mobile/android/key.properties and upload keystore. See RELEASE_CHECKLIST.md",
+                )
             }
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

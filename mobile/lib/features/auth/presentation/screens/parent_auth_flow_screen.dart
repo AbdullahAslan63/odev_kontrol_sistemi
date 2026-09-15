@@ -153,6 +153,13 @@ class _ParentAuthFlowScreenState extends ConsumerState<ParentAuthFlowScreen> {
     setState(() => _isLoading = true);
     _phoneAuthHandled = false;
     try {
+      // Öğretmen oturumu veli OTP sırasında home'a çekmesin
+      final existing = FirebaseAuth.instance.currentUser;
+      if (existing != null &&
+          (existing.phoneNumber == null || existing.phoneNumber!.isEmpty)) {
+        await FirebaseAuth.instance.signOut();
+      }
+
       final session = await SmsService.sendOtp(_phoneE164);
       if (!mounted) return;
       if (session.autoVerified) {
@@ -393,6 +400,7 @@ class _ParentAuthFlowScreenState extends ConsumerState<ParentAuthFlowScreen> {
     final state = ref.read(parentAuthProvider);
     if (state.isSuccess) {
       ref.read(invitePrefillProvider.notifier).clear();
+      ref.invalidate(authStateProvider);
       context.go('/parent/home');
     } else if (state.errorMessage != null) {
       context.showSnackBar(state.errorMessage!, isError: true);

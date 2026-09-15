@@ -38,7 +38,9 @@ class ParentExamListScreen extends ConsumerWidget {
             );
           }
           final studentId = students.first.id;
-          final examsAsync = ref.watch(studentExamsStreamProvider(studentId));
+          final examsAsync = ref.watch(studentExamsStreamProvider(
+            (studentId: studentId, teacherId: null),
+          ));
 
           return examsAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),

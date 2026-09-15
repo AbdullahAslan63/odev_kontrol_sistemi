@@ -30,10 +30,11 @@ class SmsService {
 
   static PhoneOtpSession? get currentSession => _session;
 
-  /// reCAPTCHA Enterprise yapılandırmasını önden yükler (Android/iOS).
-  /// Console anahtarları yoksa sessizce geçer; SDK akış içinde yeniden dener.
+  /// reCAPTCHA Enterprise yapılandırmasını önden yükler (Android).
+  /// iOS'ta APNs sessiz doğrulama kullanılır; burada çağırmak Safari açabiliyor.
   static Future<void> ensureRecaptchaReady() async {
     if (kIsWeb || _recaptchaReady) return;
+    if (defaultTargetPlatform == TargetPlatform.iOS) return;
     if (_recaptchaInit != null) return _recaptchaInit!.future;
 
     final init = Completer<void>();

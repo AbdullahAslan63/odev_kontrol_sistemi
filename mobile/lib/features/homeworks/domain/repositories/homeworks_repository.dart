@@ -6,13 +6,22 @@ abstract class HomeworksRepository {
   Stream<List<HomeworkEntity>> getTeacherHomeworks(String teacherId);
 
   /// Sınıfa özel ödevlerin canlı akışı
-  Stream<List<HomeworkEntity>> getClassHomeworks(String classId);
+  Stream<List<HomeworkEntity>> getClassHomeworks(
+    String classId, {
+    String? teacherId,
+  });
 
   /// Bir ödeve ait tüm öğrenci durumlarının canlı akışı (`homework_assignments`)
-  Stream<List<HomeworkAssignmentEntity>> getHomeworkAssignments(String homeworkId);
+  Stream<List<HomeworkAssignmentEntity>> getHomeworkAssignments(
+    String homeworkId, {
+    String? teacherId,
+  });
 
   /// Bir öğrencinin tüm ödev atamalarının canlı akışı (Veli ekranı için)
-  Stream<List<HomeworkAssignmentEntity>> getStudentAssignments(String studentId);
+  Stream<List<HomeworkAssignmentEntity>> getStudentAssignments(
+    String studentId, {
+    String? teacherId,
+  });
 
   /// Tek ödev detayını getirme
   Future<HomeworkEntity?> getHomeworkById(String homeworkId);

@@ -20,9 +20,11 @@ final teacherHomeworksStreamProvider =
 /// Bir ödeve ait öğrenci durumlarının akışı
 final homeworkAssignmentsStreamProvider = StreamProvider.family<
     List<HomeworkAssignmentEntity>, String>((ref, homeworkId) {
-  return ref
-      .watch(homeworksRepositoryProvider)
-      .getHomeworkAssignments(homeworkId);
+  final teacherId = ref.watch(currentUserProvider)?.uid;
+  return ref.watch(homeworksRepositoryProvider).getHomeworkAssignments(
+        homeworkId,
+        teacherId: teacherId,
+      );
 });
 
 /// Bir öğrenciye ait tüm ödev atamalarının canlı akışı (Veli paneli için)

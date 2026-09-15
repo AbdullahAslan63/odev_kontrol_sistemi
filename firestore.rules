@@ -47,12 +47,63 @@ service cloud.firestore {
       return isTeacher() && resource.data.teacherId == request.auth.uid;
     }
 
+    function teacherOwnsStudent(studentId) {
+      return get(/databases/$(database)/documents/students/$(studentId)).data.teacherId
+        == request.auth.uid;
+    }
+
+    /// Create/update homework: her studentId bu öğretmene ait olmalı (max 20).
+    function homeworkStudentIdsOwned() {
+      let ids = request.resource.data.studentIds;
+      return ids is list &&
+        ids.size() >= 1 &&
+        ids.size() <= 20 &&
+        (ids.size() < 1 || teacherOwnsStudent(ids[0])) &&
+        (ids.size() < 2 || teacherOwnsStudent(ids[1])) &&
+        (ids.size() < 3 || teacherOwnsStudent(ids[2])) &&
+        (ids.size() < 4 || teacherOwnsStudent(ids[3])) &&
+        (ids.size() < 5 || teacherOwnsStudent(ids[4])) &&
+        (ids.size() < 6 || teacherOwnsStudent(ids[5])) &&
+        (ids.size() < 7 || teacherOwnsStudent(ids[6])) &&
+        (ids.size() < 8 || teacherOwnsStudent(ids[7])) &&
+        (ids.size() < 9 || teacherOwnsStudent(ids[8])) &&
+        (ids.size() < 10 || teacherOwnsStudent(ids[9])) &&
+        (ids.size() < 11 || teacherOwnsStudent(ids[10])) &&
+        (ids.size() < 12 || teacherOwnsStudent(ids[11])) &&
+        (ids.size() < 13 || teacherOwnsStudent(ids[12])) &&
+        (ids.size() < 14 || teacherOwnsStudent(ids[13])) &&
+        (ids.size() < 15 || teacherOwnsStudent(ids[14])) &&
+        (ids.size() < 16 || teacherOwnsStudent(ids[15])) &&
+        (ids.size() < 17 || teacherOwnsStudent(ids[16])) &&
+        (ids.size() < 18 || teacherOwnsStudent(ids[17])) &&
+        (ids.size() < 19 || teacherOwnsStudent(ids[18])) &&
+        (ids.size() < 20 || teacherOwnsStudent(ids[19]));
+    }
+
+    /// parent_profiles.studentIds: yalnızca students.parentIds içinde olan ID'ler (max 10).
+    function parentProfileStudentIdsLinked() {
+      let ids = request.resource.data.get('studentIds', []);
+      return ids is list &&
+        ids.size() <= 10 &&
+        (ids.size() < 1 || isParentOfStudent(ids[0])) &&
+        (ids.size() < 2 || isParentOfStudent(ids[1])) &&
+        (ids.size() < 3 || isParentOfStudent(ids[2])) &&
+        (ids.size() < 4 || isParentOfStudent(ids[3])) &&
+        (ids.size() < 5 || isParentOfStudent(ids[4])) &&
+        (ids.size() < 6 || isParentOfStudent(ids[5])) &&
+        (ids.size() < 7 || isParentOfStudent(ids[6])) &&
+        (ids.size() < 8 || isParentOfStudent(ids[7])) &&
+        (ids.size() < 9 || isParentOfStudent(ids[8])) &&
+        (ids.size() < 10 || isParentOfStudent(ids[9]));
+    }
+
     function parentStudentIds() {
       return get(/databases/$(database)/documents/parent_profiles/$(request.auth.uid))
         .data.get('studentIds', []);
     }
 
-    /// Veli yalnızca kendi öğrencilerine atanmış ödevi okuyabilir (studentIds denormalize).
+    /// Veli ödev okuma: studentIds ∩ parent_profiles.studentIds.
+    /// studentIds yazımı parentProfileStudentIdsLinked ile kilitli.
     function parentCanReadHomework() {
       return isParent() &&
         resource.data.keys().hasAny(['studentIds']) &&
@@ -75,7 +126,18 @@ service cloud.firestore {
 
     match /parent_profiles/{uid} {
       allow read: if isOwner(uid) || isAdmin();
-      allow write: if isOwner(uid);
+      allow create: if isOwner(uid) &&
+        (
+          !('studentIds' in request.resource.data.keys()) ||
+          request.resource.data.studentIds.size() == 0 ||
+          parentProfileStudentIdsLinked()
+        );
+      allow update: if isOwner(uid) &&
+        (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['studentIds']) ||
+          parentProfileStudentIdsLinked()
+        );
+      allow delete: if isOwner(uid);
     }
 
     match /classes/{classId} {
@@ -100,18 +162,18 @@ service cloud.firestore {
     }
 
     match /invite_codes/{code} {
-      // Sınıf kodları (type=class): kayıt öncesi doğrulama için anonim get.
-      // Eski öğrenci kodları: yalnızca kullanılmamışken anonim get.
+      // Anonim get: yalnızca aktif sınıf kodu veya kullanılmamış öğrenci kodu.
+      // Kullanılmış kodlar artık auth ile de okunmaz (enumeration).
       allow get: if resource.data.get('revoked', false) == false &&
         (
           resource.data.get('type', 'student') == 'class' ||
-          resource.data.used == false ||
-          isAuthenticated()
+          resource.data.used == false
         );
       allow list: if isTeacher() || isAdmin();
       allow create: if isTeacher() &&
         request.resource.data.teacherId == request.auth.uid;
-      allow update: if isTeacher() ||
+      allow update: if (isTeacher() &&
+          resource.data.teacherId == request.auth.uid) ||
         (isParent() &&
           resource.data.get('type', 'student') != 'class' &&
           resource.data.used == false &&
@@ -121,35 +183,47 @@ service cloud.firestore {
           request.resource.data.usedBy == request.auth.uid);
     }
 
-    // Veli: yalnızca kendi öğrencilerine atanmış ödev (studentIds). Liste enumeration kapalı.
     match /homeworks/{homeworkId} {
       allow get: if isAdmin() ||
         teacherOwnsResource() ||
         parentCanReadHomework();
-      allow list: if isAdmin() || isTeacher();
+      allow list: if isAdmin() ||
+        (isTeacher() && resource.data.teacherId == request.auth.uid);
       allow create: if teacherOwnsCreate() &&
         request.resource.data.keys().hasAll(['studentIds']) &&
-        request.resource.data.studentIds is list;
+        homeworkStudentIdsOwned();
       allow update: if teacherOwnsResource() &&
-        request.resource.data.teacherId == resource.data.teacherId;
+        request.resource.data.teacherId == resource.data.teacherId &&
+        (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['studentIds']) ||
+          homeworkStudentIdsOwned()
+        );
       allow delete: if teacherOwnsResource();
     }
 
     match /homework_assignments/{assignmentId} {
-      allow read: if isAdmin() ||
+      allow get: if isAdmin() ||
         teacherOwnsResource() ||
         (isParent() && isParentOfStudent(resource.data.studentId));
-      allow create: if teacherOwnsCreate();
+      allow list: if isAdmin() ||
+        (isTeacher() && resource.data.teacherId == request.auth.uid) ||
+        (isParent() && isParentOfStudent(resource.data.studentId));
+      allow create: if teacherOwnsCreate() &&
+        teacherOwnsStudent(request.resource.data.studentId);
       allow update: if teacherOwnsResource() &&
         request.resource.data.teacherId == resource.data.teacherId;
       allow delete: if teacherOwnsResource();
     }
 
     match /exam_results/{examId} {
-      allow read: if isAdmin() ||
+      allow get: if isAdmin() ||
         teacherOwnsResource() ||
         (isParent() && isParentOfStudent(resource.data.studentId));
-      allow create: if teacherOwnsCreate();
+      allow list: if isAdmin() ||
+        (isTeacher() && resource.data.teacherId == request.auth.uid) ||
+        (isParent() && isParentOfStudent(resource.data.studentId));
+      allow create: if teacherOwnsCreate() &&
+        teacherOwnsStudent(request.resource.data.studentId);
       allow update: if teacherOwnsResource() &&
         request.resource.data.teacherId == resource.data.teacherId;
       allow delete: if teacherOwnsResource();
@@ -187,7 +261,14 @@ service cloud.firestore {
     match /notifications/{notificationId} {
       allow read: if isAuthenticated() &&
         resource.data.userId == request.auth.uid;
-      allow create: if isTeacher();
+      // Öğretmen mesaj bildirimi; alanlar kısıtlı (App Check Faz 8).
+      allow create: if isTeacher() &&
+        request.resource.data.keys().hasAll(['userId', 'title', 'body', 'type', 'isRead']) &&
+        request.resource.data.userId is string &&
+        request.resource.data.title is string &&
+        request.resource.data.body is string &&
+        request.resource.data.isRead == false &&
+        request.resource.data.type in ['message', 'homework', 'exam', 'system'];
       allow update: if isAuthenticated() &&
         resource.data.userId == request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);

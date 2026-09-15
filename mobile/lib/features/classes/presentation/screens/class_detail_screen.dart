@@ -171,8 +171,16 @@ class _ClassDetailScreenState extends ConsumerState<ClassDetailScreen> {
         ),
       );
     } else {
+      final err = ref.read(classNotifierProvider).error;
+      final detail = err?.toString().replaceFirst(RegExp(r'^Exception: '), '');
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Davet kodu oluşturulamadı.')),
+        SnackBar(
+          content: Text(
+            detail == null || detail.isEmpty
+                ? 'Davet kodu oluşturulamadı.'
+                : detail,
+          ),
+        ),
       );
     }
   }

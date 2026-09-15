@@ -2,7 +2,8 @@
 
 Mobil uygulama kökü: **`mobile/`**. Tüm Flutter/Android/iOS komutları bu dizinden çalıştırılır.
 
-Kod tarafı hazırlık (stabilize/kalite): sürüm `0.1.0+1`, Crashlytics (release), gizlilik sayfaları, CI workflow.
+Kod tarafı hazırlık (stabilize/kalite): sürüm `1.0.0+1`, Crashlytics (release), gizlilik sayfaları, CI workflow.
+Lansman runbook’ları: [LAUNCH_SCOPE.md](LAUNCH_SCOPE.md), [OPS_DEPLOY.md](OPS_DEPLOY.md), [PLATFORM_RELEASE.md](PLATFORM_RELEASE.md), [SMOKE_E2E.md](SMOKE_E2E.md), [STORE_LAUNCH.md](STORE_LAUNCH.md), [SOFT_LAUNCH.md](SOFT_LAUNCH.md).
 
 ---
 

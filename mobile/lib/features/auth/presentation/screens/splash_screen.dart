@@ -55,17 +55,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     final user = authState.valueOrNull;
     final firebaseUser = FirebaseAuth.instance.currentUser;
 
-    // Firebase oturumu var, profil henüz stream'de değil — bekle
+    // Firebase oturumu var, Firestore profili henüz gelmedi — çıkış yapma.
+    // Eski davranış 8 sn sonra signOut edip welcome'a atıyordu.
     if (firebaseUser != null && user == null) {
-      _profileWaitTimer ??= Timer(const Duration(seconds: 8), () async {
+      _profileWaitTimer ??= Timer(const Duration(seconds: 12), () {
         if (!mounted || _navigated) return;
-        // Profil gelmedi: bozuk hesap — çıkış yap, welcome'a git
-        try {
-          await ref.read(authRepositoryProvider).signOut();
-        } catch (_) {}
-        if (!mounted || _navigated) return;
-        _navigated = true;
-        context.go('/welcome');
+        ref.invalidate(authStateProvider);
       });
       return;
     }

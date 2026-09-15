@@ -17,4 +17,6 @@ class AdminConstants {
 
   static const int pageSize = 25;
   static const int activityLimit = 50;
+  /// Öğretmen picker / broadcast estimate üst sınırı
+  static const int teacherPickerLimit = 200;
 }

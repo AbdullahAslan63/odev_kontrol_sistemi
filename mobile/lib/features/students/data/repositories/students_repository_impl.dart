@@ -78,6 +78,15 @@ class StudentsRepositoryImpl implements StudentsRepository {
       'studentCount': FieldValue.increment(1),
     });
 
+    if (student.teacherId.isNotEmpty) {
+      await _firestore.collection(AppConstants.colUsers).doc(student.teacherId).set(
+        {
+          'studentCount': FieldValue.increment(1),
+          'updatedAt': DateTime.now().toIso8601String(),
+        },
+        SetOptions(merge: true),
+      );
+    }
     await _syncClassInviteRoster(student.classId);
     return docRef.id;
   }
@@ -118,10 +127,13 @@ class StudentsRepositoryImpl implements StudentsRepository {
       final code = classDoc.data()?['inviteCode'] as String?;
       if (code == null || code.isEmpty) return;
 
-      final snapshot = await _studentsRef
-          .where('classId', isEqualTo: classId)
-          .limit(AppConstants.pageSize * 5)
-          .get();
+      Query<Map<String, dynamic>> query =
+          _studentsRef.where('classId', isEqualTo: classId);
+      final teacherId = classDoc.data()?['teacherId'] as String? ?? '';
+      if (teacherId.isNotEmpty) {
+        query = query.where('teacherId', isEqualTo: teacherId);
+      }
+      final snapshot = await query.limit(AppConstants.pageSize * 5).get();
 
       final students = snapshot.docs.map((doc) {
         final data = doc.data();

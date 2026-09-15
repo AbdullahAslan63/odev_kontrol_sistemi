@@ -87,10 +87,13 @@ class _TeacherAuthFlowScreenState extends ConsumerState<TeacherAuthFlowScreen> {
     if (preview == null) return;
 
     setState(() {
-      _isLogin = preview.exists;
-      _displayName = preview.name;
+      _isLogin = preview.exists && preview.isTeacher;
+      _displayName = null;
       if (_isLogin) {
         _step = _TeacherStep.password;
+      } else if (preview.exists && !preview.isTeacher) {
+        // checkEmail zaten hata state'i basar; burada güvenlik ağı
+        return;
       } else {
         _step = _TeacherStep.name;
       }
@@ -124,6 +127,7 @@ class _TeacherAuthFlowScreenState extends ConsumerState<TeacherAuthFlowScreen> {
     if (!mounted) return;
     final authState = ref.read(teacherAuthProvider);
     if (authState.isSuccess) {
+      ref.invalidate(authStateProvider);
       context.go('/teacher/home');
     }
   }

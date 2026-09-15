@@ -48,7 +48,12 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final authState = ref.read(authStateProvider);
       final user = authState.valueOrNull;
-      final firebaseUser = FirebaseAuth.instance.currentUser;
+      User? firebaseUser;
+      try {
+        firebaseUser = FirebaseAuth.instance.currentUser;
+      } catch (_) {
+        firebaseUser = null;
+      }
       final location = state.uri.toString();
 
       final isAuthPage = location.startsWith('/auth') ||
@@ -58,25 +63,30 @@ final routerProvider = Provider<GoRouter>((ref) {
           location.startsWith('/splash') ||
           location.startsWith('/join');
 
+      // Öğretmen/veli kayıt ekranındayken profil gelince home'a çekme
+      final isCredentialFlow = location.startsWith('/auth/teacher') ||
+          location.startsWith('/auth/parent');
+
       // Stream / profil yüklenirken welcome'a atma
       if (authState.isLoading) return null;
 
-      // Auth oturumu var, Firestore profili henüz yok — korumalı rotaya alma
+      // Auth oturumu var, Firestore profili henüz yok — welcome'a atma
       if (firebaseUser != null && user == null) {
-        if (isAuthPage) return null;
+        if (location == '/splash' || isAuthPage) return null;
         return '/splash';
       }
 
       final isLoggedIn = user != null;
 
       if (!isLoggedIn && (location == '/splash' || location == '/')) {
+        if (firebaseUser != null) return null;
         return '/welcome';
       }
 
       if (!isLoggedIn && !isAuthPage) return '/welcome';
 
       if (isLoggedIn) {
-        if (isAuthPage) {
+        if (isAuthPage && !isCredentialFlow) {
           return user.isTeacher ? '/teacher/home' : '/parent/home';
         }
 
@@ -234,6 +244,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/parent/messages',
             builder: (context, state) => const ParentMessagesListScreen(),
+          ),
+          GoRoute(
+            path: '/parent/notifications',
+            redirect: (context, state) => '/parent/messages',
           ),
           GoRoute(
             path: '/parent/profile',

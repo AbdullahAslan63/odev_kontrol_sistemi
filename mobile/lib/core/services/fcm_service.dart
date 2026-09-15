@@ -26,15 +26,23 @@ class FcmService {
 
     FirebaseMessaging.onMessage.listen((message) {
       debugPrint('FCM foreground: ${message.notification?.title}');
+      // Sistem tray iOS/Android’de foreground’da otomatik gösterilmeyebilir;
+      // in-app snackbar ana ekranlarda ayrı ele alınır.
     });
 
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
       debugPrint('FCM opened: ${message.data}');
     });
 
-    final initial = await _messaging.getInitialMessage();
-    if (initial != null) {
-      debugPrint('FCM initial: ${initial.data}');
+    try {
+      final initial = await _messaging
+          .getInitialMessage()
+          .timeout(const Duration(seconds: 3));
+      if (initial != null) {
+        debugPrint('FCM initial: ${initial.data}');
+      }
+    } catch (e) {
+      debugPrint('FCM initial message skipped: $e');
     }
 
     _messaging.onTokenRefresh.listen((token) async {

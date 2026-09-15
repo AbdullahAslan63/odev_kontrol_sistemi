@@ -34,17 +34,31 @@ class AuthRepositoryImpl implements AuthRepository {
         if (_cachedUser?.uid == firebaseUser.uid) {
           return _cachedUser;
         }
-        try {
-          final profile = await getUserProfile(firebaseUser.uid);
+
+        AppUser? profile;
+        for (var attempt = 0; attempt < 8; attempt++) {
+          if (_cachedUser?.uid == firebaseUser.uid) {
+            return _cachedUser;
+          }
+          try {
+            profile = await getUserProfile(firebaseUser.uid);
+            if (profile != null) break;
+          } on AuthException {
+            // permission-denied / kurallar gecikmesi — tekrar dene
+          } catch (_) {}
+          await Future<void>.delayed(
+            Duration(milliseconds: 200 * (attempt + 1)),
+          );
+        }
+
+        if (profile != null) {
           _cachedUser = profile;
           return profile;
-        } on AuthException {
-          _cachedUser = null;
-          return null;
-        } catch (_) {
-          _cachedUser = null;
-          return null;
         }
+        if (_cachedUser?.uid == firebaseUser.uid) {
+          return _cachedUser;
+        }
+        return null;
       });
     } catch (_) {
       return Stream.value(null);
@@ -200,10 +214,14 @@ class AuthRepositoryImpl implements AuthRepository {
         'email': email.trim().toLowerCase(),
       });
       final data = result.data;
+      final exists = data['exists'] as bool? ?? false;
+      final isTeacher = data['isTeacher'] as bool? ?? false;
       return TeacherAuthPreview(
-        exists: data['exists'] as bool? ?? false,
-        name: data['name'] as String?,
-        role: data['role'] as String?,
+        exists: exists,
+        name: null,
+        role: exists
+            ? (isTeacher ? 'teacher' : 'parent')
+            : null,
       );
     } on FirebaseFunctionsException catch (e) {
       throw AuthException(e.message ?? 'E-posta kontrol edilemedi.');
@@ -255,12 +273,25 @@ class AuthRepositoryImpl implements AuthRepository {
   }) async {
     final batch = _firestore.batch();
 
+    // Sıra kritik (rules): users → students.parentIds → parent_profiles.studentIds
     if (mergeUser) {
       batch.set(
         _users.doc(uid),
         userModel.toFirestore(),
         SetOptions(merge: true),
       );
+    } else {
+      batch.set(_users.doc(uid), userModel.toFirestore());
+    }
+
+    batch.update(
+      _firestore.collection('students').doc(studentId),
+      {
+        'parentIds': FieldValue.arrayUnion([uid]),
+      },
+    );
+
+    if (mergeUser) {
       batch.set(
         _firestore.collection('parent_profiles').doc(uid),
         {
@@ -274,7 +305,6 @@ class AuthRepositoryImpl implements AuthRepository {
         SetOptions(merge: true),
       );
     } else {
-      batch.set(_users.doc(uid), userModel.toFirestore());
       batch.set(
         _firestore.collection('parent_profiles').doc(uid),
         {
@@ -287,13 +317,6 @@ class AuthRepositoryImpl implements AuthRepository {
         },
       );
     }
-
-    batch.update(
-      _firestore.collection('students').doc(studentId),
-      {
-        'parentIds': FieldValue.arrayUnion([uid]),
-      },
-    );
 
     // Sınıf kodları yeniden kullanılabilir; yalnızca eski öğrenci kodlarını işaretle
     if (inviteType != 'class') {
@@ -455,6 +478,91 @@ class AuthRepositoryImpl implements AuthRepository {
       return data;
     } catch (e) {
       if (e is AuthException) rethrow;
+      throw _mapException(e);
+    }
+  }
+
+  @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null || user.email == null) {
+        throw const AuthException('Şifre değiştirmek için e-posta hesabı gerekir.');
+      }
+      final cred = EmailAuthProvider.credential(
+        email: user.email!,
+        password: currentPassword,
+      );
+      await user.reauthenticateWithCredential(cred);
+      await user.updatePassword(newPassword);
+    } catch (e) {
+      throw _mapException(e);
+    }
+  }
+
+  @override
+  Future<void> linkStudentWithInviteCode({
+    required String inviteCode,
+    required String studentId,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      final profile = _cachedUser ??
+          (user != null ? await getUserProfile(user.uid) : null);
+      if (user == null || profile == null || !profile.isParent) {
+        throw const AuthException('Yalnızca veli hesapları öğrenci bağlayabilir.');
+      }
+
+      final codeData = await validateInviteCode(inviteCode);
+      if (codeData == null) {
+        throw const AuthException('Davet kodu bulunamadı.');
+      }
+
+      final resolvedId = _resolveStudentId(codeData, studentId);
+      final inviteType = codeData['type'] as String? ?? 'student';
+      final now = DateTime.now();
+
+      await _commitParentInviteBinding(
+        uid: user.uid,
+        userModel: AppUserModel.fromEntity(profile),
+        name: profile.name,
+        email: profile.email,
+        phone: profile.phone ?? '',
+        studentId: resolvedId,
+        inviteCode: inviteCode.trim().toUpperCase(),
+        inviteType: inviteType,
+        now: now,
+        mergeUser: true,
+      );
+    } catch (e) {
+      throw _mapException(e);
+    }
+  }
+
+  @override
+  Future<void> updateNotificationPrefs({
+    required bool pushEnabled,
+    required bool homeworkAlertsEnabled,
+  }) async {
+    try {
+      final uid = _auth.currentUser?.uid;
+      if (uid == null) {
+        throw const AuthException('Oturum bulunamadı.');
+      }
+      await _users.doc(uid).set(
+        {
+          'notificationPrefs': {
+            'pushEnabled': pushEnabled,
+            'homeworkAlertsEnabled': homeworkAlertsEnabled,
+          },
+          'updatedAt': DateTime.now().toIso8601String(),
+        },
+        SetOptions(merge: true),
+      );
+    } catch (e) {
       throw _mapException(e);
     }
   }

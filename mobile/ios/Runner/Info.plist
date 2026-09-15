@@ -22,10 +22,35 @@
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.eduly.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>eduly</string>
+				<string>com.eduly.app</string>
+				<string>app-1-763956808451-ios-37b5b0f6a85848b240b736</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Eduly, ödev ve deneme görselleri eklemek için kameranı kullanır.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Eduly, ödev ve profil görselleri seçmek için fotoğraf kütüphanene erişir.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Eduly, kaydettiğin görselleri fotoğraf kütüphanene ekleyebilir.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Eduly, video kaydı sırasında mikrofona ihtiyaç duyabilir.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -61,8 +86,6 @@
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>

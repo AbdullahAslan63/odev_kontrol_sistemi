@@ -47,6 +47,15 @@ class ClassesRepositoryImpl implements ClassesRepository {
   Future<String> addClass(ClassEntity classEntity) async {
     final model = ClassModel.fromEntity(classEntity);
     final docRef = await _classesRef.add(model.toFirestore());
+    if (classEntity.teacherId.isNotEmpty) {
+      await _firestore.collection(AppConstants.colUsers).doc(classEntity.teacherId).set(
+        {
+          'classCount': FieldValue.increment(1),
+          'updatedAt': DateTime.now().toIso8601String(),
+        },
+        SetOptions(merge: true),
+      );
+    }
     return docRef.id;
   }
 
@@ -74,44 +83,56 @@ class ClassesRepositoryImpl implements ClassesRepository {
     required String classId,
     required String teacherId,
   }) async {
-    final classDoc = await _classesRef.doc(classId).get();
-    if (!classDoc.exists) {
-      throw Exception('Sınıf bulunamadı.');
-    }
-    final classData = classDoc.data()!;
-    if (classData['teacherId'] != teacherId) {
-      throw Exception('Bu sınıf için yetkiniz yok.');
-    }
+    try {
+      final classDoc = await _classesRef.doc(classId).get();
+      if (!classDoc.exists) {
+        throw Exception('Sınıf bulunamadı.');
+      }
+      final classData = classDoc.data()!;
+      if (classData['teacherId'] != teacherId) {
+        throw Exception('Bu sınıf için yetkiniz yok.');
+      }
 
-    final className = classData['name'] as String? ?? '';
-    final oldCode = classData['inviteCode'] as String?;
-    if (oldCode != null && oldCode.isNotEmpty) {
-      await _inviteCodesRef.doc(oldCode).set(
-        {'revoked': true},
-        SetOptions(merge: true),
+      final className = classData['name'] as String? ?? '';
+      final oldCode = classData['inviteCode'] as String?;
+      if (oldCode != null && oldCode.isNotEmpty) {
+        await _inviteCodesRef.doc(oldCode).set(
+          {'revoked': true},
+          SetOptions(merge: true),
+        );
+      }
+
+      final students = await _loadStudentOptions(
+        classId,
+        teacherId: teacherId,
       );
+      final code = _generateRandomCode();
+      final now = DateTime.now();
+
+      final invite = InviteCodeModel(
+        code: code,
+        type: 'class',
+        classId: classId,
+        className: className,
+        students: students,
+        teacherId: teacherId,
+        createdAt: now,
+      );
+
+      final batch = _firestore.batch();
+      batch.set(_inviteCodesRef.doc(code), invite.toFirestore());
+      batch.update(_classesRef.doc(classId), {'inviteCode': code});
+      await batch.commit();
+
+      return invite;
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        throw Exception(
+          'Davet kodu kaydedilemedi. Firestore yetkisi yetersiz.',
+        );
+      }
+      throw Exception(e.message ?? 'Davet kodu oluşturulamadı.');
     }
-
-    final students = await _loadStudentOptions(classId);
-    final code = _generateRandomCode();
-    final now = DateTime.now();
-
-    final invite = InviteCodeModel(
-      code: code,
-      type: 'class',
-      classId: classId,
-      className: className,
-      students: students,
-      teacherId: teacherId,
-      createdAt: now,
-    );
-
-    final batch = _firestore.batch();
-    batch.set(_inviteCodesRef.doc(code), invite.toFirestore());
-    batch.update(_classesRef.doc(classId), {'inviteCode': code});
-    await batch.commit();
-
-    return invite;
   }
 
   @override
@@ -128,7 +149,6 @@ class ClassesRepositoryImpl implements ClassesRepository {
       final invite = InviteCodeModel.fromFirestore(inviteDoc);
       if (!invite.isValid) return null;
 
-      // Öğrenci listesini güncel tut
       await refreshClassInviteRoster(classId);
       final refreshed = await _inviteCodesRef.doc(code).get();
       return InviteCodeModel.fromFirestore(refreshed);
@@ -144,7 +164,11 @@ class ClassesRepositoryImpl implements ClassesRepository {
     final code = classDoc.data()?['inviteCode'] as String?;
     if (code == null || code.isEmpty) return;
 
-    final students = await _loadStudentOptions(classId);
+    final teacherId = classDoc.data()?['teacherId'] as String? ?? '';
+    final students = await _loadStudentOptions(
+      classId,
+      teacherId: teacherId,
+    );
     final className = classDoc.data()?['name'] as String? ?? '';
     await _inviteCodesRef.doc(code).set(
       {
@@ -155,11 +179,16 @@ class ClassesRepositoryImpl implements ClassesRepository {
     );
   }
 
-  Future<List<InviteStudentOption>> _loadStudentOptions(String classId) async {
-    final snapshot = await _studentsRef
-        .where('classId', isEqualTo: classId)
-        .limit(AppConstants.pageSize * 5)
-        .get();
+  Future<List<InviteStudentOption>> _loadStudentOptions(
+    String classId, {
+    required String teacherId,
+  }) async {
+    Query<Map<String, dynamic>> query =
+        _studentsRef.where('classId', isEqualTo: classId);
+    if (teacherId.isNotEmpty) {
+      query = query.where('teacherId', isEqualTo: teacherId);
+    }
+    final snapshot = await query.limit(AppConstants.pageSize * 5).get();
 
     final list = snapshot.docs.map((doc) {
       final data = doc.data();

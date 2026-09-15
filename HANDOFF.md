@@ -2,7 +2,7 @@
 
 Altyapı (auth, rules dosyaları, index dosyaları, FCM client, hosting config, local build) hazır.
 **Faz B ilerleme (`eduly-server`):** Firestore rules + indexes canlı; Hosting canlı (`https://eduly-server.web.app`).
-**Kalan:** Authentication'da Email/Password + Phone açılması (Console), admin seed, Cloud Functions deploy (`sendBroadcast`, `getTeacherAuthPreview`).
+**Kalan (manuel ops):** Authentication Email/Password + Phone (Console), admin seed, deploy yetkisi olan hesapla [OPS_DEPLOY.md](OPS_DEPLOY.md). Lansman fazları: [LAUNCH_SCOPE.md](LAUNCH_SCOPE.md), [PLATFORM_RELEASE.md](PLATFORM_RELEASE.md), [SMOKE_E2E.md](SMOKE_E2E.md), [STORE_LAUNCH.md](STORE_LAUNCH.md), [SOFT_LAUNCH.md](SOFT_LAUNCH.md).
 
 ## Açılacak klasörler
 

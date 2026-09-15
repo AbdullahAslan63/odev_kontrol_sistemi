@@ -21,10 +21,10 @@ class InviteStudentOption {
   }
 
   Map<String, dynamic> toMap() {
+    // Anonim okunan davet dokümanında okul numarası tutma (PII azaltma).
     return {
       'id': id,
       'name': name,
-      if (schoolNumber != null) 'schoolNumber': schoolNumber,
     };
   }
 }
