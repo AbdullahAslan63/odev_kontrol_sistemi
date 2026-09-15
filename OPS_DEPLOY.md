@@ -6,9 +6,9 @@ Proje: `eduly-server`. Bu adımlar Console + CLI gerektirir; kod tarafı hazır.
 
 1. [Authentication](https://console.firebase.google.com/project/eduly-server/authentication) → Email/Password **Enable**
 2. Aynı ekran → Phone **Enable**
-3. Android app: paket `com.eduly.app` ekle/güncelle → yeni `google-services.json` indir → `mobile/android/app/google-services.json`
+3. Android app: paket `com.eduly.app` → `google-services.json`
 4. Project settings → Android SHA-1 / SHA-256 (debug + upload keystore)
-5. iOS: APNs Authentication Key yükle (Phone Auth + FCM)
+5. iOS app: bundle `com.eduly.mobile` → `GoogleService-Info.plist` + APNs Authentication Key (Phone Auth + FCM)
 6. Admin seed: [ADMIN_SEED.md](ADMIN_SEED.md)
 
 ## Deploy sırası (repo kökü)
