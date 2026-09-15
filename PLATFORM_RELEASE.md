@@ -28,7 +28,7 @@ cd mobile && flutter build appbundle --release
 
 ## iOS
 
-1. Apple Developer: App ID `com.eduly.app` + Push Notifications.
+1. Apple Developer: App ID `com.eduly.mobile` + Push Notifications.
 2. `Runner.entitlements`: debug `aps-environment=development`; App Store için Xcode’da **production**.
 3. Firebase Console → iOS app → APNs key.
 4. IPA:

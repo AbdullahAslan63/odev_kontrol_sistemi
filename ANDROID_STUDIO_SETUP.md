@@ -97,19 +97,22 @@ Alternatif: `dart pub global activate flutterfire_cli` → `flutterfire configur
 
 1. Blaze planı açık olmalı (SMS ücretlidir).
 2. Authentication → **Sign-in method** → **Phone** → Enable
-3. Authentication → **Settings** → **reCAPTCHA** / App verification: Android + iOS (ve web panel için Web) anahtarlarını `com.eduly.app` paket/bundle kimliğiyle ekleyin. Eski pakete bağlı anahtarları silin.
+3. Authentication → **Settings** → **reCAPTCHA** / App verification: Android (`com.eduly.app`) + iOS (`com.eduly.mobile`) anahtarlarını ilgili paket/bundle kimliğiyle ekleyin. Eski pakete bağlı anahtarları silin.
 4. Google Cloud Console’da **reCAPTCHA Enterprise API** ve **Identity Toolkit API** etkin olsun.
 5. Geliştirme: Phone provider → **Phone numbers for testing** ile sahte numara + sabit OTP tanımlayın (SMS harcamaz).
 6. Paket adı değişince eski Android uygulamasına bağlı SHA ve reCAPTCHA anahtarlarını `com.eduly.app` kaydıyla yeniden oluşturun.
 
-### Adım 2.5 — iOS için (isteğe bağlı)
+### Adım 2.5 — iOS (`com.eduly.mobile`)
 
-Bundle ID: **`com.eduly.app`**
+Bundle ID: **`com.eduly.mobile`**
 
-1. Firebase Console → iOS uygulaması ekle (bundle ID: `com.eduly.app`)
+1. Firebase Console → iOS uygulaması ekle (bundle ID: `com.eduly.mobile`) — veya CLI: `firebase apps:create IOS ... --bundle-id=com.eduly.mobile`
 2. `GoogleService-Info.plist` indir → `mobile/ios/Runner/GoogleService-Info.plist`
-3. Apple Developer → APNs Auth Key (.p8) oluştur → Firebase Project settings → Cloud Messaging → iOS APNs Authentication Key
-4. Xcode → Signing & Capabilities → **Push Notifications** + Background Modes → Remote notifications
+3. `Info.plist` → URL Types: `com.eduly.mobile` + Phone Auth scheme `app-1-…-ios-…` (GOOGLE_APP_ID)
+4. Apple Developer → App ID `com.eduly.mobile` → Push Notifications
+5. APNs Auth Key (.p8) → Firebase Project settings → Cloud Messaging → Apple app configuration
+6. Xcode → Signing & Capabilities → **Push Notifications** + Background Modes → Remote notifications
+7. Authentication → Authorized domains: `eduly-server.firebaseapp.com`, `eduly-server.web.app` (genelde hazır)
 
 ---
 

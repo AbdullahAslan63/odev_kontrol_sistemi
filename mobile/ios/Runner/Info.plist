@@ -28,12 +28,12 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>com.eduly.app</string>
+			<string>com.eduly.mobile</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>eduly</string>
-				<string>com.eduly.app</string>
-				<string>app-1-763956808451-ios-37b5b0f6a85848b240b736</string>
+				<string>com.eduly.mobile</string>
+				<string>app-1-763956808451-ios-4e89567e4767231240b736</string>
 			</array>
 		</dict>
 	</array>
