@@ -128,6 +128,8 @@ Panel yalnızca `role=admin` (+ aktif) hesapları kabul eder. İlk admin: [ADMIN
 
 Canlı Hosting / rules / functions deploy adımları: **[HANDOFF.md](HANDOFF.md)** (Faz B — Firebase CLI gerekir).
 
+Mağaza yayını (Play Internal + TestFlight) — senin yapman gereken adımlar: **[PRODUCTION_RUNBOOK.md](PRODUCTION_RUNBOOK.md)**.
+
 ### 3. Backend & PostgreSQL (Opsiyonel)
 
 ```bash

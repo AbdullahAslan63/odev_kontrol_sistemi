@@ -49,6 +49,8 @@
 	<string>Eduly, ödev ve profil görselleri seçmek için fotoğraf kütüphanene erişir.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Eduly, kaydettiğin görselleri fotoğraf kütüphanene ekleyebilir.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Eduly konum takibi yapmaz. Bazı sistem bileşenleri konum API’sine referans verdiği için Apple bu açıklamayı zorunlu tutar; konum izni istenmez.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Eduly, video kaydı sırasında mikrofona ihtiyaç duyabilir.</string>
 	<key>UIApplicationSceneManifest</key>

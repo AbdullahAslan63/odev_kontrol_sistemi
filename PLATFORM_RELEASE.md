@@ -54,6 +54,6 @@ Doğrula: `/privacy.html`, `/terms.html`, `/support.html`, SPA deep link `/teach
 
 ## Kapı (4.V)
 
-- [ ] AAB release-signed
-- [ ] IPA fiziksel cihazda OTP + FCM
-- [ ] Hosting yasal sayfalar + admin deep link
+- [x] AAB release-signed
+- [ ] IPA fiziksel cihazda OTP + FCM — [PRODUCTION_RUNBOOK.md](PRODUCTION_RUNBOOK.md) §3
+- [x] Hosting yasal sayfalar + admin deep link

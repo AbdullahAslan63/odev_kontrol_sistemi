@@ -71,10 +71,10 @@ Ayrıntılar: [HANDOFF.md](HANDOFF.md) Faz B, [ADMIN_SEED.md](ADMIN_SEED.md), [S
 firebase deploy --only firestore:rules,firestore:indexes,functions,hosting
 ```
 
-- [ ] Rules + indexes deploy
-- [ ] Functions (`sendBroadcast`) deploy
-- [ ] Hosting + privacy/terms canlı
-- [ ] Local/canlı smoke ([HANDOFF.md](HANDOFF.md))
+- [x] Rules + indexes deploy
+- [x] Functions (`sendBroadcast`) deploy
+- [x] Hosting + privacy/terms canlı
+- [ ] Local/canlı smoke ([HANDOFF.md](HANDOFF.md)) — fiziksel cihaz; bkz. [PRODUCTION_RUNBOOK.md](PRODUCTION_RUNBOOK.md)
 
 ---
 
@@ -93,11 +93,13 @@ firebase deploy --only firestore:rules,firestore:indexes,functions,hosting
 - [ ] Ekran görüntüleri (6.7" / 6.1" vb.)
 
 ### Teknik
-- [ ] Upload keystore yedeklendi
-- [ ] `applicationId` (Android) = `com.eduly.app`; iOS bundle id = `com.eduly.mobile` (Play/App Store ve Firebase app kayıtlarıyla birebir aynı)
-- [ ] Debug + upload SHA-1/SHA-256 Firebase’e eklendi; reCAPTCHA anahtarları yeni paket adına göre
+- [x] Upload keystore yedeklendi (`~/Documents/Eduly-Release-Secrets/` + ikinci kopya sen)
+- [x] `applicationId` (Android) = `com.eduly.app`; iOS bundle id = `com.eduly.mobile` (Play/App Store ve Firebase app kayıtlarıyla birebir aynı)
+- [x] Upload SHA-1/SHA-256 Firebase’e eklendi (2026-09-22); debug SHA zaten vardı
 - [ ] Crashlytics Console’da veri geliyor (release build)
 - [ ] App Check (önerilir; Console’da etkinleştir — henüz istemci zorunlu değil)
+
+Manuel mağaza adımları: [PRODUCTION_RUNBOOK.md](PRODUCTION_RUNBOOK.md).
 
 ---
 

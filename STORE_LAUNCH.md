@@ -19,6 +19,7 @@ Metinler: [STORE_LISTING.md](STORE_LISTING.md). Teknik: [RELEASE_CHECKLIST.md](R
 
 ## Kapı (7.V)
 
-- [ ] Internal testing canlı veya review’a gönderildi
-- [ ] Keystore + APNs yedek (repo dışı)
-- [ ] Rollback notu bu dosyada
+- [ ] Internal testing canlı veya review’a gönderildi — [PRODUCTION_RUNBOOK.md](PRODUCTION_RUNBOOK.md)
+- [x] Keystore yedek (repo dışı: `~/Documents/Eduly-Release-Secrets/`)
+- [ ] APNs `.p8` yedek + Firebase’e yükleme (sen)
+- [x] Rollback notu bu dosyada
