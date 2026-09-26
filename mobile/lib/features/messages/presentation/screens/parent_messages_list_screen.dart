@@ -123,7 +123,7 @@ class _ParentMessageCard extends StatelessWidget {
               ),
             ],
           ),
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
             child: Divider(height: 1, color: AppColors.border),
           ),

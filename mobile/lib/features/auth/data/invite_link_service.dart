@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../presentation/providers/auth_providers.dart';
 
-/// Davet linki: https://eduly-server.web.app/join?code=OT-XXXX&studentId=optional
+/// Davet linki: https://eduly-server.web.app/join?code=OT-A7K9M2&studentId=optional
 class InviteLinkService {
   InviteLinkService(this._ref);
 

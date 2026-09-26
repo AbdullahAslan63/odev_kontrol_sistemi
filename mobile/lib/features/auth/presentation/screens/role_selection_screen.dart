@@ -45,7 +45,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: AppColors.textPrimary),
+          icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => context.pop(),
         ),
       ),
@@ -200,7 +200,7 @@ class _RoleCardState extends State<_RoleCard> {
                 ],
               ),
               const SizedBox(height: 16),
-              const Divider(height: 1, color: AppColors.border),
+              Divider(height: 1, color: AppColors.border),
               const SizedBox(height: 12),
               ...widget.features.map(
                 (f) => Padding(

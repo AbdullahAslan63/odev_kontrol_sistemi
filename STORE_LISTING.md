@@ -13,7 +13,7 @@ Eduly, öğretmenlerin sınıflarını, öğrencilerini, ödevlerini ve deneme s
 
 Öne çıkanlar:
 • Sınıf ve öğrenci yönetimi
-• Veli davet kodu (OT-XXXXXX)
+• Veli davet kodu (OT-A7K9M2)
 • Ödev durum takibi
 • Deneme netleri ve başarı grafikleri
 • Duyuru / mesajlaşma ve bildirimler

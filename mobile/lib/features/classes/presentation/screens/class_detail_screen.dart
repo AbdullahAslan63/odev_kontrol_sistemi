@@ -525,7 +525,7 @@ class _StudentCard extends StatelessWidget {
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.arrow_forward_ios_rounded,
+                icon: Icon(Icons.arrow_forward_ios_rounded,
                     size: 16, color: AppColors.textSecondary),
                 onPressed: onTap,
               ),

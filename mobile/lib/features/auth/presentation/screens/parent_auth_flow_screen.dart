@@ -416,7 +416,7 @@ class _ParentAuthFlowScreenState extends ConsumerState<ParentAuthFlowScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded,
+          icon: Icon(Icons.arrow_back_rounded,
               color: AppColors.textPrimary),
           onPressed: _isLoading ? null : _prevStep,
         ),
@@ -556,7 +556,7 @@ class _ParentAuthFlowScreenState extends ConsumerState<ParentAuthFlowScreen> {
             hint: 'Ad Soyad',
             controller: _nameController,
             textCapitalization: TextCapitalization.words,
-            prefixIcon: const Icon(Icons.person_outline_rounded,
+            prefixIcon: Icon(Icons.person_outline_rounded,
                 color: AppColors.textSecondary),
             validator: (v) {
               if (v == null || v.trim().isEmpty) {
@@ -594,7 +594,7 @@ class _ParentAuthFlowScreenState extends ConsumerState<ParentAuthFlowScreen> {
             hint: AppStrings.inviteCodeHint,
             controller: _codeController,
             textCapitalization: TextCapitalization.characters,
-            prefixIcon: const Icon(Icons.vpn_key_outlined,
+            prefixIcon: Icon(Icons.vpn_key_outlined,
                 color: AppColors.textSecondary),
             validator: (v) {
               if (v == null || v.trim().isEmpty) {

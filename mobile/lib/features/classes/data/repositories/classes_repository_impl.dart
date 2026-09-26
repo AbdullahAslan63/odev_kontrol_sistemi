@@ -1,5 +1,5 @@
-import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../../core/utils/app_utils.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../models/class_model.dart';
 import '../../domain/entities/class_entity.dart';
@@ -106,7 +106,7 @@ class ClassesRepositoryImpl implements ClassesRepository {
         classId,
         teacherId: teacherId,
       );
-      final code = _generateRandomCode();
+      final code = InviteCodeGenerator.generate();
       final now = DateTime.now();
 
       final invite = InviteCodeModel(
@@ -200,13 +200,5 @@ class ClassesRepositoryImpl implements ClassesRepository {
     }).toList();
     list.sort((a, b) => a.name.compareTo(b.name));
     return list;
-  }
-
-  String _generateRandomCode() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    final random = Random();
-    final randomPart =
-        List.generate(6, (index) => chars[random.nextInt(chars.length)]).join();
-    return 'OT-$randomPart';
   }
 }

@@ -161,7 +161,7 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                       await ref.read(teacherAuthProvider.notifier).signOut();
                       if (context.mounted) context.go('/welcome');
                     },
-                    icon: const Icon(Icons.logout_rounded,
+                    icon: Icon(Icons.logout_rounded,
                         color: AppColors.textSecondary),
                     label: Text(
                       'Çıkış Yap',
@@ -315,7 +315,7 @@ class _RecentHomeworks extends ConsumerWidget {
                   tileColor: AppColors.surface,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppSizes.cardRadius),
-                    side: const BorderSide(color: AppColors.border),
+                    side: BorderSide(color: AppColors.border),
                   ),
                   title: Text(hw.title, style: AppTextStyles.h4),
                   subtitle: Text(hw.subject),

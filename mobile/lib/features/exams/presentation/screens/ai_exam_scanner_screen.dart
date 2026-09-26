@@ -61,7 +61,7 @@ class _AiExamScannerScreenState extends ConsumerState<AiExamScannerScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.textPrimary),
+          icon: const Icon(Icons.arrow_back_ios_new),
           onPressed: () => context.pop(),
         ),
         title: Text(
@@ -85,7 +85,7 @@ class _AiExamScannerScreenState extends ConsumerState<AiExamScannerScreen> {
                   ),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
                     Icon(Icons.auto_awesome, color: Colors.white, size: 32),
                     SizedBox(width: 12),
@@ -153,7 +153,7 @@ class _AiExamScannerScreenState extends ConsumerState<AiExamScannerScreen> {
                     ),
                   ),
                   child: _isScanning
-                      ? const Column(
+                      ? Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             CircularProgressIndicator(color: AppColors.teacherPrimary),

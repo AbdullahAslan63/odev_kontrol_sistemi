@@ -38,7 +38,7 @@ class DashboardScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Salt okunur gözetim paneli. Öğretmen işlemleri mobil uygulamada yapılır.',
               style: TextStyle(color: AppColors.textSecondary),
             ),

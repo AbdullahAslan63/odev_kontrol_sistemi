@@ -150,7 +150,7 @@ class _TeacherAuthFlowScreenState extends ConsumerState<TeacherAuthFlowScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded,
+          icon: Icon(Icons.arrow_back_rounded,
               color: AppColors.textPrimary),
           onPressed: isLoading ? null : _prevStep,
         ),
@@ -212,7 +212,7 @@ class _TeacherAuthFlowScreenState extends ConsumerState<TeacherAuthFlowScreen> {
             controller: _emailController,
             keyboardType: TextInputType.emailAddress,
             textInputAction: TextInputAction.done,
-            prefixIcon: const Icon(Icons.email_outlined,
+            prefixIcon: Icon(Icons.email_outlined,
                 color: AppColors.textSecondary),
             validator: (v) {
               if (v == null || v.trim().isEmpty) {
@@ -253,7 +253,7 @@ class _TeacherAuthFlowScreenState extends ConsumerState<TeacherAuthFlowScreen> {
             hint: 'Ad Soyad',
             controller: _nameController,
             textCapitalization: TextCapitalization.words,
-            prefixIcon: const Icon(Icons.person_outline_rounded,
+            prefixIcon: Icon(Icons.person_outline_rounded,
                 color: AppColors.textSecondary),
             validator: (v) {
               if (v == null || v.trim().isEmpty) {
@@ -295,7 +295,7 @@ class _TeacherAuthFlowScreenState extends ConsumerState<TeacherAuthFlowScreen> {
             hint: 'En az 8 karakter',
             controller: _passwordController,
             isPassword: true,
-            prefixIcon: const Icon(Icons.lock_outline_rounded,
+            prefixIcon: Icon(Icons.lock_outline_rounded,
                 color: AppColors.textSecondary),
             validator: (v) {
               if (v == null || v.isEmpty) {

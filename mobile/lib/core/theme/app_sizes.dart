@@ -53,27 +53,27 @@ class AppSizes {
 class AppShadows {
   AppShadows._();
 
-  static const List<BoxShadow> cardShadow = [
+  static List<BoxShadow> get cardShadow => [
     BoxShadow(
       color: AppColors.shadow,
       blurRadius: 8,
-      offset: Offset(0, 2),
+      offset: const Offset(0, 2),
     ),
   ];
 
-  static const List<BoxShadow> buttonShadow = [
+  static List<BoxShadow> get buttonShadow => [
     BoxShadow(
       color: AppColors.shadow,
       blurRadius: 12,
-      offset: Offset(0, 4),
+      offset: const Offset(0, 4),
     ),
   ];
 
-  static const List<BoxShadow> bottomNavShadow = [
+  static List<BoxShadow> get bottomNavShadow => [
     BoxShadow(
       color: AppColors.shadow,
       blurRadius: 20,
-      offset: Offset(0, -4),
+      offset: const Offset(0, -4),
     ),
   ];
 }

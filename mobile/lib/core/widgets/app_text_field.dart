@@ -171,7 +171,7 @@ class AppDropdown<T> extends StatelessWidget {
           ),
           dropdownColor: AppColors.surface,
           borderRadius: BorderRadius.circular(AppSizes.cardRadius),
-          icon: const Icon(
+          icon: Icon(
             Icons.keyboard_arrow_down_rounded,
             color: AppColors.textSecondary,
           ),

@@ -126,7 +126,7 @@ class _TeacherMessageCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(Icons.people_outline_rounded,
+              Icon(Icons.people_outline_rounded,
                   size: 16, color: AppColors.textSecondary),
               const SizedBox(width: 4),
               Text(

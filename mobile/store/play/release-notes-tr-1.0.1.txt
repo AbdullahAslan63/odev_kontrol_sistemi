@@ -1,0 +1,6 @@
+1.0.1
+• Telefonun açık veya koyu teması otomatik uygulanır.
+• Veli ekranları yeşil, öğretmen ekranları indigo paleti kullanır.
+• Sınıf davet kodu OT- ile başlar ve 6 karakterdir (örnek: OT-A7K9M2).
+• Öğretmen duyuruları sunucu üzerinden iletilir.
+• Yazı tipi uygulama ile birlikte gelir; profildeki öğrenci listesi daha hızlı açılır.

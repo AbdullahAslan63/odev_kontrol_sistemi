@@ -184,7 +184,7 @@ class _ParentHomeworkAssignmentCard extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.calendar_today_rounded,
                 size: 14,
                 color: AppColors.textSecondary,

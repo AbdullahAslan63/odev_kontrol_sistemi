@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../utils/app_utils.dart';
+
 /// Tarih formatlama uzantıları
 extension DateTimeExtensions on DateTime {
   /// Türkçe tarih formatı: "22 Temmuz 2026"
@@ -68,10 +70,8 @@ extension StringExtensions on String {
         .hasMatch(this);
   }
 
-  /// Davet kodu formatı (OT-8A-XXXXXX)
-  bool get isValidInviteCode {
-    return RegExp(r'^OT-[0-9]{1,2}[A-Z]-[A-Z0-9]{6}$').hasMatch(this);
-  }
+  /// Davet kodu formatı (`OT-` + 6 karakter). [InviteCodeGenerator] ile aynı kural.
+  bool get isValidInviteCode => InviteCodeGenerator.isValid(this);
 
   /// Şifre geçerliliği (min 8 karakter)
   bool get isValidPassword => length >= 8;

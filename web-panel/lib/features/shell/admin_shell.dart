@@ -74,7 +74,7 @@ class AdminShell extends ConsumerWidget {
             indicatorColor: AppColors.primarySurface,
             selectedIconTheme: const IconThemeData(color: AppColors.primary),
             unselectedIconTheme:
-                const IconThemeData(color: AppColors.textSecondary),
+                IconThemeData(color: AppColors.textSecondary),
             onDestinationSelected: (index) =>
                 context.go(_destinations[index].path),
             leading: Padding(
@@ -129,7 +129,7 @@ class AdminShell extends ConsumerWidget {
                           admin?.name.isNotEmpty == true
                               ? admin!.name
                               : admin?.email ?? '',
-                          style: const TextStyle(color: AppColors.textSecondary),
+                          style: TextStyle(color: AppColors.textSecondary),
                         ),
                         const SizedBox(width: 8),
                         IconButton(
@@ -216,7 +216,7 @@ Widget adminStatCard({
     elevation: 0,
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(16),
-      side: const BorderSide(color: AppColors.border),
+      side: BorderSide(color: AppColors.border),
     ),
     child: Padding(
       padding: const EdgeInsets.all(20),
@@ -228,7 +228,7 @@ Widget adminStatCard({
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: const TextStyle(color: AppColors.textSecondary)),
+                Text(label, style: TextStyle(color: AppColors.textSecondary)),
                 Text(
                   value,
                   style: const TextStyle(

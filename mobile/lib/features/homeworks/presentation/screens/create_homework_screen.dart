@@ -69,7 +69,7 @@ class _CreateHomeworkScreenState extends ConsumerState<CreateHomeworkScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.school_outlined,
+                    Icon(Icons.school_outlined,
                         size: 64, color: AppColors.textSecondary),
                     const SizedBox(height: 16),
                     Text('Önce Bir Sınıf Oluşturmalısınız',
@@ -231,7 +231,7 @@ class _CreateHomeworkScreenState extends ConsumerState<CreateHomeworkScreen> {
                             style: AppTextStyles.bodyMedium,
                           ),
                           const Spacer(),
-                          const Icon(Icons.arrow_drop_down_rounded,
+                          Icon(Icons.arrow_drop_down_rounded,
                               color: AppColors.textSecondary),
                         ],
                       ),

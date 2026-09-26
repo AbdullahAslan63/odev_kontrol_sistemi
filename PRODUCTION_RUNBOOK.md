@@ -1,6 +1,6 @@
 # Eduly — Production Yayın Runbook (Manuel Adımlar)
 
-Son güncelleme: 2026-09-22.
+Son güncelleme: 2026-09-26.
 
 Bu dosya **senin (Vefa) Console / Apple / Play tarafında yapman gerekenleri** adım adım anlatır.  
 Ajanın tamamladığı teknik hazırlıklar en altta “Tamamlananlar” bölümünde.
@@ -12,7 +12,7 @@ Paket kimlikleri:
 | Android | `com.eduly.app` |
 | iOS | `com.eduly.mobile` |
 | Firebase | `eduly-server` |
-| Sürüm | `1.0.0+2` |
+| Sürüm | `1.0.1+4` |
 
 Yasal URL’ler (canlı):
 
@@ -127,8 +127,8 @@ Phone Auth + FCM production için şart.
    ```
    mobile/build/app/outputs/bundle/release/app-release.aab
    ```
-4. Release name: `1.0.0 (2)`  
-5. Release notes (TR): `İlk internal test sürümü — öğretmen/veli ödev ve deneme takibi.`
+4. Release name: `1.0.1 (4)`  
+5. Release notes (TR): `mobile/store/play/release-notes-tr-1.0.1.txt`
 6. **Save → Review → Start rollout to Internal testing**
 
 ### 2.5 Tester ekle
@@ -199,7 +199,7 @@ Yükleme:
 1. Veli OTP (gerçek SMS — Blaze + APNs şart)  
 2. Öğretmen e-posta  
 3. FCM (arka plan / kapalı uygulama)  
-4. Davet linki: `https://eduly-server.web.app/join?code=OT-XXXX`
+4. Davet linki: `https://eduly-server.web.app/join?code=OT-A7K9M2`
 
 ### 3.5 App Store listing (Production’a çıkmadan)
 
@@ -229,6 +229,14 @@ Yükleme:
    - App Store: Submit for Review → Phased Release
 
 **App Check enforce** bu aşamada zorunlu değil (`SOFT_LAUNCH.md` / Faz 8).
+
+Kurallar ve fonksiyonlar repoda güncellendi; canlıya ayrıca basılmalı:
+
+```bash
+firebase deploy --only firestore:rules,functions,storage
+```
+
+`sendTeacherMessage` deploy edilmeden öğretmen duyurusu istemciden yazılamaz. Storage kuralı kovayı kapatır.
 
 ---
 

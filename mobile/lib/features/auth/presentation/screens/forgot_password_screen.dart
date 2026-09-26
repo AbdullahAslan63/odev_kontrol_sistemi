@@ -69,7 +69,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: AppColors.textPrimary),
+          icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => context.pop(),
         ),
       ),
@@ -107,7 +107,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                   label: AppStrings.email,
                   hint: 'ornek@okul.com',
                   controller: _emailController,
-                  prefixIcon: const Icon(Icons.email_outlined,
+                  prefixIcon: Icon(Icons.email_outlined,
                       color: AppColors.textSecondary),
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.done,

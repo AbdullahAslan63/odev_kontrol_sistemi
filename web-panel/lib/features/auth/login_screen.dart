@@ -58,7 +58,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
-              side: const BorderSide(color: AppColors.border),
+              side: BorderSide(color: AppColors.border),
             ),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(32, 36, 32, 28),
@@ -77,7 +77,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    const Text(
+                    Text(
                       'Süper kullanıcı girişi',
                       style: TextStyle(color: AppColors.textSecondary),
                     ),

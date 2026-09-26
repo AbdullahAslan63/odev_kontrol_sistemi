@@ -206,7 +206,7 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
       child: ListView(
         children: [
           Text(_teacher!.name, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
-          Text(_teacher!.email, style: const TextStyle(color: AppColors.textSecondary)),
+          Text(_teacher!.email, style: TextStyle(color: AppColors.textSecondary)),
           const SizedBox(height: 8),
           Text('${_classes.length} sınıf · ${_students.length} öğrenci (ilk sayfa)'),
           const SizedBox(height: 24),

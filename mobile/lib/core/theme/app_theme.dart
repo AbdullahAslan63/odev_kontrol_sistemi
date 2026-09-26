@@ -9,61 +9,81 @@ class AppTheme {
   AppTheme._();
 
   /// Öğretmen teması (lacivert-mavi)
-  static ThemeData teacherTheme() => _buildTheme(
-        seedColor: AppColors.teacherPrimary,
-        primaryColor: AppColors.teacherPrimary,
-        primarySurface: AppColors.teacherSurface,
-      );
+  static ThemeData teacherTheme({Brightness brightness = Brightness.light}) {
+    final palette = AppPalette.forBrightness(brightness);
+    return _buildTheme(
+      seedColor: AppColors.teacherPrimary,
+      primaryColor: AppColors.teacherPrimary,
+      primarySurface: palette.teacherSurface,
+      brightness: brightness,
+      palette: palette,
+    );
+  }
 
   /// Veli teması (yeşil)
-  static ThemeData parentTheme() => _buildTheme(
-        seedColor: AppColors.parentPrimary,
-        primaryColor: AppColors.parentPrimary,
-        primarySurface: AppColors.parentSurface,
-      );
+  static ThemeData parentTheme({Brightness brightness = Brightness.light}) {
+    final palette = AppPalette.forBrightness(brightness);
+    return _buildTheme(
+      seedColor: AppColors.parentPrimary,
+      primaryColor: AppColors.parentPrimary,
+      primarySurface: palette.parentSurface,
+      brightness: brightness,
+      palette: palette,
+    );
+  }
 
-  /// Genel uygulama teması (öğretmen varsayılan)
+  /// Sistem açıkken kullanılan tema (öğretmen varsayılan).
   static ThemeData get light => teacherTheme();
+
+  /// Sistem koyuyken kullanılan tema.
+  static ThemeData get dark =>
+      teacherTheme(brightness: Brightness.dark);
 
   static ThemeData _buildTheme({
     required Color seedColor,
     required Color primaryColor,
     required Color primarySurface,
+    required Brightness brightness,
+    required AppPalette palette,
   }) {
+    TextStyle tone(TextStyle style, Color color) => style.copyWith(color: color);
+
     // Tek kaynak: AppTextStyles → ThemeData.textTheme
     final textTheme = TextTheme(
-      displayLarge: AppTextStyles.h1,
-      displayMedium: AppTextStyles.h2,
-      displaySmall: AppTextStyles.h3,
-      headlineLarge: AppTextStyles.h1,
-      headlineMedium: AppTextStyles.h2,
-      headlineSmall: AppTextStyles.h3,
-      titleLarge: AppTextStyles.h3,
-      titleMedium: AppTextStyles.h4,
-      titleSmall: AppTextStyles.labelLarge,
-      bodyLarge: AppTextStyles.bodyLarge,
-      bodyMedium: AppTextStyles.bodyMedium,
-      bodySmall: AppTextStyles.bodySmall,
-      labelLarge: AppTextStyles.buttonMedium,
-      labelMedium: AppTextStyles.labelMedium,
-      labelSmall: AppTextStyles.labelSmall,
+      displayLarge: tone(AppTextStyles.h1, palette.textPrimary),
+      displayMedium: tone(AppTextStyles.h2, palette.textPrimary),
+      displaySmall: tone(AppTextStyles.h3, palette.textPrimary),
+      headlineLarge: tone(AppTextStyles.h1, palette.textPrimary),
+      headlineMedium: tone(AppTextStyles.h2, palette.textPrimary),
+      headlineSmall: tone(AppTextStyles.h3, palette.textPrimary),
+      titleLarge: tone(AppTextStyles.h3, palette.textPrimary),
+      titleMedium: tone(AppTextStyles.h4, palette.textPrimary),
+      titleSmall: tone(AppTextStyles.labelLarge, palette.textPrimary),
+      bodyLarge: tone(AppTextStyles.bodyLarge, palette.textPrimary),
+      bodyMedium: tone(AppTextStyles.bodyMedium, palette.textSecondary),
+      bodySmall: tone(AppTextStyles.bodySmall, palette.textSecondary),
+      labelLarge: tone(AppTextStyles.buttonMedium, AppColors.textOnPrimary),
+      labelMedium: tone(AppTextStyles.labelMedium, palette.textSecondary),
+      labelSmall: tone(AppTextStyles.labelSmall, palette.textTertiary),
     );
 
     return ThemeData(
       useMaterial3: true,
+      brightness: brightness,
       colorScheme: ColorScheme.fromSeed(
         seedColor: seedColor,
+        brightness: brightness,
         primary: primaryColor,
         onPrimary: AppColors.textOnPrimary,
         secondary: AppColors.accent,
         error: AppColors.error,
-        surface: AppColors.surface,
-        onSurface: AppColors.textPrimary,
-        onSurfaceVariant: AppColors.textSecondary,
+        surface: palette.surface,
+        onSurface: palette.textPrimary,
+        onSurfaceVariant: palette.textSecondary,
       ),
 
       // ── Scaffold ──────────────────────────────────────────────────────────
-      scaffoldBackgroundColor: AppColors.background,
+      scaffoldBackgroundColor: palette.background,
 
       // ── Typography ────────────────────────────────────────────────────────
       textTheme: textTheme,
@@ -71,22 +91,23 @@ class AppTheme {
 
       // ── AppBar ────────────────────────────────────────────────────────────
       appBarTheme: AppBarTheme(
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.textPrimary,
+        backgroundColor: palette.surface,
+        foregroundColor: palette.textPrimary,
         elevation: 0,
         scrolledUnderElevation: 1,
-        shadowColor: AppColors.shadow,
+        shadowColor: palette.shadow,
         centerTitle: false,
-        titleTextStyle: AppTextStyles.h3.copyWith(fontWeight: FontWeight.w700),
-        iconTheme: const IconThemeData(
-          color: AppColors.textPrimary,
+        titleTextStyle: tone(AppTextStyles.h3, palette.textPrimary)
+            .copyWith(fontWeight: FontWeight.w700),
+        iconTheme: IconThemeData(
+          color: palette.textPrimary,
           size: AppSizes.iconMd,
         ),
       ),
 
       // ── Bottom Navigation ──────────────────────────────────────────────────
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: AppColors.surface,
+        backgroundColor: palette.surface,
         indicatorColor: primarySurface,
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
@@ -96,20 +117,20 @@ class AppTheme {
             );
           }
           return AppTextStyles.labelSmall.copyWith(
-            color: AppColors.textSecondary,
+            color: palette.textSecondary,
           );
         }),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return IconThemeData(color: primaryColor, size: AppSizes.iconMd);
           }
-          return const IconThemeData(
-            color: AppColors.textSecondary,
+          return IconThemeData(
+            color: palette.textSecondary,
             size: AppSizes.iconMd,
           );
         }),
         elevation: 0,
-        shadowColor: AppColors.shadow,
+        shadowColor: palette.shadow,
         surfaceTintColor: Colors.transparent,
         height: AppSizes.bottomNavHeight,
       ),
@@ -157,16 +178,16 @@ class AppTheme {
       // ── Input ──────────────────────────────────────────────────────────────
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surfaceVariant,
+        fillColor: palette.surfaceVariant,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSizes.inputRadius),
-          borderSide: const BorderSide(color: AppColors.border, width: 1),
+          borderSide: BorderSide(color: palette.border, width: 1),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSizes.inputRadius),
-          borderSide: const BorderSide(color: AppColors.border, width: 1),
+          borderSide: BorderSide(color: palette.border, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSizes.inputRadius),
@@ -180,36 +201,36 @@ class AppTheme {
           borderRadius: BorderRadius.circular(AppSizes.inputRadius),
           borderSide: const BorderSide(color: AppColors.error, width: 1.5),
         ),
-        hintStyle: AppTextStyles.inputHint,
-        labelStyle: AppTextStyles.inputLabel,
+        hintStyle: tone(AppTextStyles.inputHint, palette.textTertiary),
+        labelStyle: tone(AppTextStyles.inputLabel, palette.textSecondary),
         errorStyle: AppTextStyles.inputError,
       ),
 
       // ── Card ───────────────────────────────────────────────────────────────
       cardTheme: CardThemeData(
-        color: AppColors.surface,
+        color: palette.surface,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSizes.cardRadius),
-          side: const BorderSide(color: AppColors.border, width: 1),
+          side: BorderSide(color: palette.border, width: 1),
         ),
         clipBehavior: Clip.antiAlias,
         margin: EdgeInsets.zero,
       ),
 
       // ── Divider ────────────────────────────────────────────────────────────
-      dividerTheme: const DividerThemeData(
-        color: AppColors.divider,
+      dividerTheme: DividerThemeData(
+        color: palette.divider,
         thickness: 1,
         space: 0,
       ),
 
       // ── Chip ───────────────────────────────────────────────────────────────
       chipTheme: ChipThemeData(
-        backgroundColor: AppColors.surfaceVariant,
+        backgroundColor: palette.surfaceVariant,
         selectedColor: primarySurface,
-        labelStyle: AppTextStyles.labelMedium,
-        side: const BorderSide(color: AppColors.border),
+        labelStyle: tone(AppTextStyles.labelMedium, palette.textSecondary),
+        side: BorderSide(color: palette.border),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSizes.chipRadius),
         ),
@@ -217,9 +238,13 @@ class AppTheme {
 
       // ── SnackBar ───────────────────────────────────────────────────────────
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: AppColors.textPrimary,
+        backgroundColor: brightness == Brightness.dark
+            ? AppPalette.light.surface
+            : AppPalette.light.textPrimary,
         contentTextStyle: AppTextStyles.bodySmall.copyWith(
-          color: AppColors.textOnPrimary,
+          color: brightness == Brightness.dark
+              ? AppPalette.light.textPrimary
+              : AppColors.textOnPrimary,
           fontWeight: FontWeight.w500,
         ),
         shape: RoundedRectangleBorder(
@@ -231,12 +256,13 @@ class AppTheme {
 
       // ── Dialog ─────────────────────────────────────────────────────────────
       dialogTheme: DialogThemeData(
-        backgroundColor: AppColors.surface,
+        backgroundColor: palette.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSizes.dialogRadius),
         ),
-        titleTextStyle: AppTextStyles.h3.copyWith(fontWeight: FontWeight.w700),
-        contentTextStyle: AppTextStyles.bodyMedium,
+        titleTextStyle: tone(AppTextStyles.h3, palette.textPrimary)
+            .copyWith(fontWeight: FontWeight.w700),
+        contentTextStyle: tone(AppTextStyles.bodyMedium, palette.textSecondary),
         elevation: 8,
       ),
 
@@ -259,20 +285,20 @@ class AppTheme {
           borderRadius: BorderRadius.circular(AppSizes.cardRadius),
         ),
         tileColor: Colors.transparent,
-        titleTextStyle: AppTextStyles.h4,
-        subtitleTextStyle: AppTextStyles.bodySmall,
-        iconColor: AppColors.textSecondary,
+        titleTextStyle: tone(AppTextStyles.h4, palette.textPrimary),
+        subtitleTextStyle: tone(AppTextStyles.bodySmall, palette.textSecondary),
+        iconColor: palette.textSecondary,
       ),
 
       // ── Switch ─────────────────────────────────────────────────────────────
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) return primaryColor;
-          return AppColors.textTertiary;
+          return palette.textTertiary;
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) return primarySurface;
-          return AppColors.border;
+          return palette.border;
         }),
       ),
 

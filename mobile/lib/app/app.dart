@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/services/fcm_service.dart';
+import '../core/theme/app_colors.dart';
 import '../core/theme/app_theme.dart';
 import '../features/auth/data/invite_link_service.dart';
 import '../features/auth/presentation/providers/auth_providers.dart';
@@ -45,11 +47,33 @@ class _AppState extends ConsumerState<App> {
     });
 
     final router = ref.watch(routerProvider);
+    final parent = ref.watch(currentUserProvider)?.isParent == true;
 
     return MaterialApp.router(
       title: 'Eduly',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
+      theme: parent ? AppTheme.parentTheme() : AppTheme.light,
+      darkTheme: parent
+          ? AppTheme.parentTheme(brightness: Brightness.dark)
+          : AppTheme.dark,
+      themeMode: ThemeMode.system,
+      builder: (context, child) {
+        final dark = Theme.of(context).brightness == Brightness.dark;
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness:
+                dark ? Brightness.light : Brightness.dark,
+            statusBarBrightness: dark ? Brightness.dark : Brightness.light,
+            systemNavigationBarColor: dark
+                ? AppPalette.dark.background
+                : AppPalette.light.surface,
+            systemNavigationBarIconBrightness:
+                dark ? Brightness.light : Brightness.dark,
+          ),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
       routerConfig: router,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,

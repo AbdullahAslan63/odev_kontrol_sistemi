@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/constants/app_strings.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_sizes.dart';
@@ -65,17 +66,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         final ids = List<String>.from(
           profile.data()?['studentIds'] as List? ?? [],
         );
+        final docs = await Future.wait(
+          ids.map(
+            (id) => FirebaseFirestore.instance
+                .collection(AppConstants.colStudents)
+                .doc(id)
+                .get(),
+          ),
+        );
         final students = <_LinkedStudent>[];
-        for (final id in ids) {
-          final s = await FirebaseFirestore.instance
-              .collection(AppConstants.colStudents)
-              .doc(id)
-              .get();
+        for (final s in docs) {
           if (s.exists) {
             final data = s.data()!;
             students.add(
               _LinkedStudent(
-                id: id,
+                id: s.id,
                 name: data['name'] as String? ?? 'Öğrenci',
                 schoolNumber: data['schoolNumber'] as String?,
               ),
@@ -141,7 +146,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             const SizedBox(height: 16),
             AppTextField(
               label: 'Sınıf Davet Kodu',
-              hint: 'Örn: OT-A7K9M2',
+              hint: AppStrings.inviteCodeHint,
               controller: codeController,
               prefixIcon: const Icon(Icons.key_rounded,
                   color: AppColors.parentPrimary),
@@ -655,7 +660,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       leading: Icon(icon, color: AppColors.textSecondary),
       title: Text(title, style: AppTextStyles.labelLarge),
       subtitle: Text(subtitle, style: AppTextStyles.bodySmall),
-      trailing: const Icon(Icons.chevron_right_rounded,
+      trailing: Icon(Icons.chevron_right_rounded,
           color: AppColors.textTertiary),
       onTap: onTap,
     );

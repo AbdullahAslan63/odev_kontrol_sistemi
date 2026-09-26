@@ -52,6 +52,9 @@ mobile/android/app/release
 /backend/.env
 /backend/serviceAccountKey.json
 /functions/node_modules/
+/rules-tests/node_modules/
+firestore-debug.log
+firebase-debug.log
 /functions/lib/
 
 # ── Firebase yapılandırma dosyaları (GİZLİ — asla commit etme) ─

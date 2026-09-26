@@ -117,7 +117,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Bildirimler Cloud Functions üzerinden FCM ile iletilir.',
                   style: TextStyle(color: AppColors.textSecondary),
                 ),

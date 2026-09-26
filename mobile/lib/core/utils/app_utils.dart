@@ -1,3 +1,5 @@
+import 'dart:math';
+
 /// Net hesaplama yardımcısı.
 /// Türkiye'deki 4 yanlış 1 doğruyu götürür sistemi baz alınmıştır.
 class NetCalculator {
@@ -61,24 +63,24 @@ class HomeworkStatusCalculator {
   }
 }
 
-/// Davet kodu oluşturucu
+/// Sınıf davet kodu: `OT-` + 6 karakter.
+/// 0, 1, I ve O yok; okunurken karışmasınlar.
 class InviteCodeGenerator {
   InviteCodeGenerator._();
 
-  static const _chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  static const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  static const example = 'OT-A7K9M2';
 
-  /// Davet kodu oluştur: OT-{grade}{className}-{6 karakter}
-  static String generate(int gradeLevel, String className) {
-    final random = DateTime.now().millisecondsSinceEpoch;
-    final buffer = StringBuffer();
-    var seed = random;
-    for (var i = 0; i < 6; i++) {
-      buffer.write(_chars[seed % _chars.length]);
-      seed = seed ~/ _chars.length + (seed % 7 + 1) * 31;
-    }
-    final classInitial = className.isNotEmpty
-        ? className[0].toUpperCase()
-        : 'A';
-    return 'OT-$gradeLevel$classInitial-$buffer';
+  static final RegExp pattern = RegExp('^OT-[$alphabet]{6}\$');
+
+  static String generate([Random? random]) {
+    final rng = random ?? Random();
+    final body = List.generate(
+      6,
+      (_) => alphabet[rng.nextInt(alphabet.length)],
+    ).join();
+    return 'OT-$body';
   }
+
+  static bool isValid(String raw) => pattern.hasMatch(raw.trim().toUpperCase());
 }

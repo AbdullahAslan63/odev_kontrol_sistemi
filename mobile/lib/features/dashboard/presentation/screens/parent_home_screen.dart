@@ -307,7 +307,7 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
                       await ref.read(parentAuthProvider.notifier).signOut();
                       if (context.mounted) context.go('/welcome');
                     },
-                    icon: const Icon(Icons.logout_rounded,
+                    icon: Icon(Icons.logout_rounded,
                         color: AppColors.textSecondary),
                     label: Text(
                       'Çıkış Yap',

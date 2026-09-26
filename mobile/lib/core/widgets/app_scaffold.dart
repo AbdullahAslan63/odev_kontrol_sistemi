@@ -77,9 +77,9 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
       actions: actions,
       backgroundColor: backgroundColor ?? AppColors.surface,
       centerTitle: centerTitle,
-      bottom: showDivider
-          ? const PreferredSize(
-              preferredSize: Size.fromHeight(1),
+          bottom: showDivider
+          ? PreferredSize(
+              preferredSize: const Size.fromHeight(1),
               child: Divider(
                   height: 1,
                   thickness: 1,

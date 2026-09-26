@@ -5,6 +5,7 @@ import '../../domain/entities/app_user.dart';
 import '../../domain/entities/teacher_auth_preview.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../models/app_user_model.dart';
+import '../../../../core/utils/app_utils.dart';
 
 /// AuthRepository'nin Firebase implementasyonu.
 class AuthRepositoryImpl implements AuthRepository {
@@ -440,7 +441,10 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<Map<String, dynamic>?> validateInviteCode(String code) async {
     try {
-      final doc = await _inviteCodes.doc(code.trim().toUpperCase()).get();
+      final normalized = code.trim().toUpperCase();
+      if (!InviteCodeGenerator.isValid(normalized)) return null;
+
+      final doc = await _inviteCodes.doc(normalized).get();
       if (!doc.exists || doc.data() == null) return null;
 
       final data = Map<String, dynamic>.from(doc.data()!);

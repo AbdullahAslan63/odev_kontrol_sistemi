@@ -25,13 +25,14 @@ Kökte Flutter `pubspec.yaml` yoktur. Android Studio / Xcode için `mobile/` aç
 
 - Öğretmen: e-posta önce akışı → kayıt (isim + şifre) veya giriş (şifre)
 - Veli: telefon + SMS OTP (Firebase Phone Auth) → kayıt (isim + sınıf kodu + öğrenci seçimi) veya giriş
-- Davet linki: `https://eduly-server.web.app/join?code=OT-XXXX&studentId=optional`
+- Davet linki: `https://eduly-server.web.app/join?code=OT-A7K9M2&studentId=optional`
 - Admin: yalnızca `role=admin` + `isActive != false` — [ADMIN_SEED.md](ADMIN_SEED.md)
 
 ## Stabilize notları (kod)
 
 - Firestore: `invite_codes` kullanılan kodlar anonim okunamaz; ödev `get` veli için `studentIds` ∩ `parent_profiles.studentIds`
 - Yeni ödevler `studentIds` yazar; AI sınav tarayıcı UI gizlendi
+- Tema: mobil uygulama ve admin panel cihazın açık/koyu ayarını izler (`ThemeMode.system`)
 - Crashlytics release’te açık; CI: `.github/workflows/ci.yml`
 - Yasal sayfalar: Hosting `privacy.html` / `terms.html` / `support.html`
 

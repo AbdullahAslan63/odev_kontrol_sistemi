@@ -110,12 +110,18 @@ service cloud.firestore {
         resource.data.studentIds.hasAny(parentStudentIds());
     }
 
+    function sameField(field) {
+      return request.resource.data.get(field, null) == resource.data.get(field, null);
+    }
+
     match /users/{uid} {
       allow read: if isOwner(uid) || isAdmin();
       allow create: if isOwner(uid) && request.resource.data.role in ['teacher', 'parent'];
+      // Sahip rol, e-posta ve pasifleştirme bayrağını değiştiremez.
       allow update: if isOwner(uid) &&
-        (!request.resource.data.keys().hasAny(['role']) ||
-         request.resource.data.role == resource.data.role);
+        sameField('role') &&
+        sameField('email') &&
+        sameField('isActive');
       allow delete: if false;
     }
 
@@ -233,9 +239,11 @@ service cloud.firestore {
       allow read: if isAdmin() ||
         teacherOwnsResource() ||
         (isParent() && isParentOfStudent(resource.data.studentId));
-      allow create: if teacherOwnsCreate();
+      allow create: if teacherOwnsCreate() &&
+        teacherOwnsStudent(request.resource.data.studentId);
       allow update: if teacherOwnsResource() &&
-        request.resource.data.teacherId == resource.data.teacherId;
+        request.resource.data.teacherId == resource.data.teacherId &&
+        teacherOwnsStudent(request.resource.data.studentId);
       allow delete: if teacherOwnsResource();
     }
 
@@ -243,9 +251,11 @@ service cloud.firestore {
       allow read: if isAdmin() ||
         teacherOwnsResource() ||
         (isParent() && isParentOfStudent(resource.data.studentId));
-      allow create: if teacherOwnsCreate();
+      allow create: if teacherOwnsCreate() &&
+        teacherOwnsStudent(request.resource.data.studentId);
       allow update: if teacherOwnsResource() &&
-        request.resource.data.teacherId == resource.data.teacherId;
+        request.resource.data.teacherId == resource.data.teacherId &&
+        teacherOwnsStudent(request.resource.data.studentId);
       allow delete: if teacherOwnsResource();
     }
 
@@ -253,25 +263,26 @@ service cloud.firestore {
       allow read: if isAdmin() ||
         teacherOwnsResource() ||
         (isParent() && request.auth.uid in resource.data.parentIds);
-      allow create: if teacherOwnsCreate();
+      // Oluşturma yalnızca sendTeacherMessage (Admin SDK).
+      allow create: if false;
       allow update: if teacherOwnsResource() &&
-        request.resource.data.teacherId == resource.data.teacherId;
+        request.resource.data.teacherId == resource.data.teacherId &&
+        request.resource.data.parentIds == resource.data.parentIds &&
+        request.resource.data.studentIds == resource.data.studentIds;
     }
 
     match /notifications/{notificationId} {
       allow read: if isAuthenticated() &&
         resource.data.userId == request.auth.uid;
-      // Öğretmen mesaj bildirimi; alanlar kısıtlı (App Check Faz 8).
-      allow create: if isTeacher() &&
-        request.resource.data.keys().hasAll(['userId', 'title', 'body', 'type', 'isRead']) &&
-        request.resource.data.userId is string &&
-        request.resource.data.title is string &&
-        request.resource.data.body is string &&
-        request.resource.data.isRead == false &&
-        request.resource.data.type in ['message', 'homework', 'exam', 'system'];
+      // Oluşturma yalnızca Cloud Functions (Admin SDK).
+      allow create: if false;
       allow update: if isAuthenticated() &&
         resource.data.userId == request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
+    }
+
+    match /_rate_limits/{id} {
+      allow read, write: if false;
     }
 
     match /admin_broadcasts/{broadcastId} {

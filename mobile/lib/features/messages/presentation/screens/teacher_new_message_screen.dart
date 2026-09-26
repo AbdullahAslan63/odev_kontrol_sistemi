@@ -84,7 +84,7 @@ class _TeacherNewMessageScreenState
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: AppColors.textPrimary),
+          icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => context.pop(),
         ),
         title: Text(
@@ -159,7 +159,7 @@ class _TeacherNewMessageScreenState
                   label: 'Mesaj Başlığı',
                   hint: 'Örn: Yarınki Veliler Toplantısı',
                   controller: _titleController,
-                  prefixIcon: const Icon(Icons.title_rounded,
+                  prefixIcon: Icon(Icons.title_rounded,
                       color: AppColors.textSecondary),
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) {
@@ -176,7 +176,7 @@ class _TeacherNewMessageScreenState
                   hint: 'Duyuru detaylarını buraya yazın...',
                   controller: _contentController,
                   maxLines: 5,
-                  prefixIcon: const Icon(Icons.chat_bubble_outline_rounded,
+                  prefixIcon: Icon(Icons.chat_bubble_outline_rounded,
                       color: AppColors.textSecondary),
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) {

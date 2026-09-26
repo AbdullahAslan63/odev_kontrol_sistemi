@@ -1,6 +1,7 @@
+import {createHash} from "crypto";
 import {onCall, HttpsError} from "firebase-functions/v2/https";
 import {initializeApp} from "firebase-admin/app";
-import {getFirestore, FieldValue} from "firebase-admin/firestore";
+import {DocumentSnapshot, getFirestore, FieldValue} from "firebase-admin/firestore";
 import {getMessaging} from "firebase-admin/messaging";
 
 initializeApp();
@@ -195,33 +196,170 @@ export const sendBroadcast = onCall(async (request) => {
   };
 });
 
+const MESSAGE_STUDENT_CAP = 200;
+
+interface TeacherMessageRequest {
+  title?: string;
+  body?: string;
+  teacherName?: string;
+  classId?: string;
+  className?: string;
+  targetStudentId?: string;
+}
+
 interface TeacherPreviewRequest {
   email?: string;
 }
 
 /**
- * E-posta için yalnızca varlık + öğretmen mi bilgisi döner (isim/rol sızdırmaz).
- * Basit bellek içi rate limit (instance başına) — App Check enforce Faz 8.
+ * E-posta önizlemesi sayacı. Belge kimliği anahtarın özetidir; e-posta yazılmaz.
+ * 1 dakika / 20 istek. App Check enforce Faz 8.
  */
-const previewHits = new Map<string, {count: number; resetAt: number}>();
-
-function assertPreviewRateLimit(key: string): void {
-  const now = Date.now();
+async function assertPreviewRateLimit(key: string): Promise<void> {
   const windowMs = 60_000;
   const maxHits = 20;
-  const entry = previewHits.get(key);
-  if (!entry || entry.resetAt < now) {
-    previewHits.set(key, {count: 1, resetAt: now + windowMs});
-    return;
+  const id = createHash("sha256").update(key).digest("hex");
+  const ref = db.collection("_rate_limits").doc(`teacher_preview_${id}`);
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const now = Date.now();
+    const data = snap.data();
+    const resetAt = typeof data?.resetAt === "number" ? data.resetAt : 0;
+    if (!snap.exists || resetAt < now) {
+      tx.set(ref, {count: 1, resetAt: now + windowMs});
+      return;
+    }
+    const count = (typeof data?.count === "number" ? data.count : 0) + 1;
+    if (count > maxHits) {
+      throw new HttpsError(
+        "resource-exhausted",
+        "Çok fazla deneme. Lütfen bir dakika sonra tekrar deneyin.",
+      );
+    }
+    tx.update(ref, {count});
+  });
+}
+
+async function assertActiveTeacher(uid: string): Promise<void> {
+  const doc = await db.collection("users").doc(uid).get();
+  const data = doc.data();
+  if (!doc.exists || data?.role !== "teacher") {
+    throw new HttpsError("permission-denied", "Yalnızca öğretmen mesaj gönderebilir.");
   }
-  entry.count += 1;
-  if (entry.count > maxHits) {
-    throw new HttpsError(
-      "resource-exhausted",
-      "Çok fazla deneme. Lütfen bir dakika sonra tekrar deneyin.",
-    );
+  if (data?.isActive === false) {
+    throw new HttpsError("permission-denied", "Hesabınız pasif durumda.");
   }
 }
+
+export const sendTeacherMessage = onCall(
+  {consumeAppCheckToken: false},
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Oturum açmanız gerekir.");
+    }
+    const uid = request.auth.uid;
+    await assertActiveTeacher(uid);
+
+    const data = (request.data ?? {}) as TeacherMessageRequest;
+    const title = (data.title ?? "").trim();
+    const body = (data.body ?? "").trim();
+    const classId = (data.classId ?? "").trim();
+    const targetStudentId = (data.targetStudentId ?? "").trim();
+    const teacherName = (data.teacherName ?? "").trim();
+    const className = (data.className ?? "").trim();
+
+    if (!title || !body) {
+      throw new HttpsError("invalid-argument", "Başlık ve mesaj zorunludur.");
+    }
+    if (title.length > 120 || body.length > 2000) {
+      throw new HttpsError("invalid-argument", "Başlık veya mesaj çok uzun.");
+    }
+
+    if (classId) {
+      const classDoc = await db.collection("classes").doc(classId).get();
+      if (!classDoc.exists || classDoc.data()?.teacherId !== uid) {
+        throw new HttpsError("permission-denied", "Bu sınıf için yetkiniz yok.");
+      }
+    }
+
+    const studentDocs: DocumentSnapshot[] = [];
+    if (targetStudentId) {
+      const studentDoc = await db.collection("students").doc(targetStudentId).get();
+      if (!studentDoc.exists || studentDoc.data()?.teacherId !== uid) {
+        throw new HttpsError("permission-denied", "Bu öğrenci size ait değil.");
+      }
+      if (classId && studentDoc.data()?.classId !== classId) {
+        throw new HttpsError("invalid-argument", "Öğrenci seçilen sınıfta değil.");
+      }
+      studentDocs.push(studentDoc);
+    } else {
+      let studentQuery = db.collection("students").where("teacherId", "==", uid);
+      if (classId) {
+        studentQuery = studentQuery.where("classId", "==", classId);
+      }
+      const studentSnap = await studentQuery.limit(MESSAGE_STUDENT_CAP + 1).get();
+      if (studentSnap.size > MESSAGE_STUDENT_CAP) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Bu gönderim 200 öğrenciden fazla. Daha dar bir sınıf seçin.",
+        );
+      }
+      studentDocs.push(...studentSnap.docs);
+    }
+
+    const studentIds: string[] = [];
+    const parentIds = new Set<string>();
+    studentDocs.forEach((doc) => {
+      studentIds.push(doc.id);
+      const ids = (doc.data()?.parentIds as string[] | undefined) ?? [];
+      ids.forEach((id) => {
+        if (id) parentIds.add(id);
+      });
+    });
+
+    const messageRef = db.collection("messages").doc();
+    const now = FieldValue.serverTimestamp();
+    await messageRef.set({
+      teacherId: uid,
+      ...(teacherName ? {teacherName} : {}),
+      parentIds: Array.from(parentIds),
+      studentIds,
+      ...(classId ? {classId} : {}),
+      ...(className ? {className} : {}),
+      title,
+      body,
+      type: targetStudentId ? "individual" : "bulk",
+      createdAt: now,
+    });
+
+    const parents = Array.from(parentIds);
+    const chunkSize = 400;
+    for (let i = 0; i < parents.length; i += chunkSize) {
+      const chunk = parents.slice(i, i + chunkSize);
+      const batch = db.batch();
+      chunk.forEach((parentId) => {
+        const ref = db.collection("notifications").doc();
+        batch.set(ref, {
+          userId: parentId,
+          title,
+          body,
+          type: "message",
+          data: {messageId: messageRef.id},
+          isRead: false,
+          createdAt: now,
+        });
+      });
+      await batch.commit();
+    }
+
+    return {
+      messageId: messageRef.id,
+      studentCount: studentIds.length,
+      parentCount: parents.length,
+    };
+  },
+);
 
 export const getTeacherAuthPreview = onCall(
   {
@@ -238,7 +376,7 @@ export const getTeacherAuthPreview = onCall(
     }
 
     const rateKey = request.auth?.uid ?? request.rawRequest.ip ?? email;
-    assertPreviewRateLimit(String(rateKey));
+    await assertPreviewRateLimit(String(rateKey));
 
     const snap = await db
       .collection("users")

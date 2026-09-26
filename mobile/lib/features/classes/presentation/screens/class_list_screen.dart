@@ -267,7 +267,7 @@ class _ClassCard extends StatelessWidget {
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.more_vert_rounded,
+                icon: Icon(Icons.more_vert_rounded,
                     color: AppColors.textSecondary),
                 onPressed: () {
                   showModalBottomSheet(
