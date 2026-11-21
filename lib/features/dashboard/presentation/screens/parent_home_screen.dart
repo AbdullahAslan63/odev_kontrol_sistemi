@@ -8,14 +8,14 @@ import 'package:odev_takip/core/theme/app_sizes.dart';
 import 'package:odev_takip/core/widgets/matpusula_logo.dart';
 
 import '../../../../core/widgets/notification_permission_dialog.dart';
-import '../../../students/domain/entities/student_entity.dart';
-import '../../../students/presentation/providers/student_providers.dart';
-import '../../../homeworks/presentation/providers/homework_providers.dart';
 import '../../../exams/presentation/providers/exam_providers.dart';
-import '../../../goals/domain/entities/goal_entity.dart';
+import '../../../homeworks/presentation/providers/homework_providers.dart';
+import '../../../messages/presentation/providers/messages_providers.dart';
+import '../../../students/presentation/providers/student_providers.dart';
 
 /// Veli ana panel ekranı.
-/// Sadece öğretmene bağlı gerçek öğrenciyi gösterir — demo yok.
+/// Görsel dil: zengin dashboard (özet + not + duyuru).
+/// Veri: yalnızca öğretmene bağlı gerçek öğrenci — demo/Mustafa yok.
 class ParentHomeScreen extends ConsumerStatefulWidget {
   const ParentHomeScreen({super.key});
 
@@ -36,15 +36,70 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
     final user = authState.valueOrNull;
+
     final studentsAsync =
         ref.watch(parentStudentsStreamProvider(user?.uid ?? ''));
+    final activeStudent = studentsAsync.valueOrNull?.firstOrNull;
+
+    final studentName = activeStudent != null
+        ? '${activeStudent.name} (${activeStudent.classId} Sınıfı)'
+        : (studentsAsync.isLoading
+            ? 'Bağlı Öğrenci Aranıyor...'
+            : 'Henüz bağlı öğrenci yok');
+
+    final schoolNo = activeStudent?.schoolNumber != null &&
+            activeStudent!.schoolNumber!.isNotEmpty
+        ? 'Okul No: ${activeStudent.schoolNumber}'
+        : (activeStudent != null ? 'Kayıtlı Öğrenci' : 'Bağlantı Yok');
+
+    final greetingName = activeStudent != null
+        ? '${activeStudent.name} Velisi'
+        : (user?.name != null &&
+                !user!.name.startsWith('parent_') &&
+                !user.name.startsWith('Veli (')
+            ? user.name
+            : 'Veli');
+
+    final studentId = activeStudent?.id ?? '';
+    final assignmentsAsync =
+        ref.watch(studentAssignmentsStreamProvider(studentId));
+    final assignments = assignmentsAsync.valueOrNull ?? [];
+    final activeHomeworkCount =
+        assignments.where((a) => !a.isCompleted).length;
+    final completedHomeworkCount =
+        assignments.where((a) => a.isCompleted).length;
+
+    final examsAsync = ref.watch(
+      studentExamsStreamProvider((studentId: studentId, teacherId: null)),
+    );
+    final exams = examsAsync.valueOrNull ?? [];
+    final lastExam = exams.firstOrNull;
+    final lastNetStr =
+        lastExam != null ? lastExam.totalNet.toStringAsFixed(2) : '-';
+
+    final goalAsync = ref.watch(studentGoalStreamProvider(studentId));
+    final goal = goalAsync.valueOrNull;
+    final goalPercentStr = goal != null
+        ? '%${goal.progressPercentage.clamp(0, 100).toStringAsFixed(0)}'
+        : (lastExam != null
+            ? '%${((lastExam.totalNet / 90.0) * 100).clamp(0, 100).toStringAsFixed(0)}'
+            : '-');
+
+    final teacherNoteText = (activeStudent?.teacherNote != null &&
+            activeStudent!.teacherNote!.trim().isNotEmpty)
+        ? activeStudent.teacherNote!.trim()
+        : 'Öğretmeniniz henüz özel bir değerlendirme notu girmedi.';
+
+    final messagesAsync = ref.watch(parentMessagesStreamProvider);
+    final messages = messagesAsync.valueOrNull ?? [];
+    final latestMessage = messages.firstOrNull;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 140,
+            expandedHeight: 156,
             floating: false,
             pinned: true,
             backgroundColor: AppColors.parentPrimary,
@@ -57,7 +112,7 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
                     colors: [AppColors.parentPrimary, AppColors.parentLight],
                   ),
                 ),
-                padding: const EdgeInsets.fromLTRB(20, 48, 20, 14),
+                padding: const EdgeInsets.fromLTRB(20, 36, 20, 14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.end,
@@ -78,7 +133,7 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Merhaba, ${user?.name.split(' ').first ?? 'Veli'}',
+                      'Merhaba, $greetingName 👋',
                       style: AppTextStyles.h3.copyWith(color: Colors.white),
                     ),
                     const SizedBox(height: 2),
@@ -104,25 +159,196 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
             padding: const EdgeInsets.all(AppSizes.pagePadding),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                studentsAsync.when(
-                  loading: () => const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 48),
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                  error: (err, _) => _NoStudentCard(
-                    message: 'Öğrenci bilgisi yüklenemedi. Tekrar deneyin.',
+                if (!studentsAsync.isLoading && activeStudent == null) ...[
+                  _LinkStudentBanner(
                     onAdd: () => context.push('/parent/profile'),
                   ),
-                  data: (students) {
-                    if (students.isEmpty) {
-                      return _NoStudentCard(
-                        message:
-                            'Henüz bağlı öğrenci yok. Öğretmenden davet kodu alıp Profil’den bağlayın.',
-                        onAdd: () => context.push('/parent/profile'),
-                      );
-                    }
-                    return _LinkedStudentHome(student: students.first);
-                  },
+                  const SizedBox(height: 24),
+                ],
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.parentSurface,
+                    borderRadius: BorderRadius.circular(AppSizes.cardRadius),
+                    border: Border.all(
+                        color: AppColors.parentPrimary.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: const BoxDecoration(
+                          color: AppColors.parentPrimary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.face_rounded,
+                            color: Colors.white, size: 26),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Bağlı Öğrenci Profili',
+                                style: AppTextStyles.labelSmall),
+                            const SizedBox(height: 2),
+                            Text(
+                              studentName,
+                              style: AppTextStyles.h4.copyWith(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color:
+                              AppColors.parentPrimary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          schoolNo,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.parentPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const _ParentSectionTitle('Özet Durumu 📊'),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _ParentSummaryCard(
+                        label: 'Aktif Ödev',
+                        value: '$activeHomeworkCount Ödev',
+                        icon: Icons.assignment_rounded,
+                        color: AppColors.parentPrimary,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _ParentSummaryCard(
+                        label: 'Tamamlanan',
+                        value: '$completedHomeworkCount Ödev',
+                        icon: Icons.check_circle_rounded,
+                        color: AppColors.success,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _ParentSummaryCard(
+                        label: 'Son Deneme Net',
+                        value: lastNetStr,
+                        icon: Icons.bar_chart_rounded,
+                        color: AppColors.accent,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _ParentSummaryCard(
+                        label: 'Hedef Başarısı',
+                        value: goalPercentStr,
+                        icon: Icons.track_changes_rounded,
+                        color: AppColors.warning,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                const _ParentSectionTitle('Son Öğretmen Notu 📝'),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(AppSizes.cardRadius),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.teacherPrimary
+                              .withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.sticky_note_2_rounded,
+                            color: AppColors.teacherPrimary, size: 24),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Öğretmen Değerlendirmesi',
+                              style: AppTextStyles.labelLarge
+                                  .copyWith(fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              teacherNoteText,
+                              style: AppTextStyles.bodySmall
+                                  .copyWith(color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const _ParentSectionTitle('Son Duyuru & Bildirimler 🔔'),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(AppSizes.cardRadius),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.notifications_active_rounded,
+                          color: AppColors.parentPrimary, size: 24),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              latestMessage?.title ?? 'Duyuru Paneli',
+                              style: AppTextStyles.labelLarge
+                                  .copyWith(fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              latestMessage?.body ??
+                                  'Henüz yeni bir duyuru veya mesaj bulunmuyor.',
+                              style: AppTextStyles.bodySmall
+                                  .copyWith(color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 32),
                 Center(
@@ -150,240 +376,45 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
   }
 }
 
-class _NoStudentCard extends StatelessWidget {
-  const _NoStudentCard({required this.message, required this.onAdd});
-  final String message;
+class _LinkStudentBanner extends StatelessWidget {
+  const _LinkStudentBanner({required this.onAdd});
   final VoidCallback onAdd;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: AppColors.parentPrimary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(AppSizes.cardRadius),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(
+            color: AppColors.parentPrimary.withValues(alpha: 0.35)),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.link_off_rounded,
-              size: 40, color: AppColors.parentPrimary),
-          const SizedBox(height: 12),
           Text(
             'Öğrenci Bağlantısı Gerekli',
-            style: AppTextStyles.h4.copyWith(fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
+            style: AppTextStyles.labelLarge.copyWith(fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
-            message,
+            'Öğretmenden aldığınız davet kodunu Profil’den girin; çocuğunuzun ödev ve denemeleri burada görünür.',
             style: AppTextStyles.bodySmall
                 .copyWith(color: AppColors.textSecondary),
-            textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: onAdd,
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.parentPrimary,
             ),
-            icon: const Icon(Icons.person_add_rounded),
+            icon: const Icon(Icons.person_add_rounded, size: 18),
             label: const Text('Davet Kodu ile Bağla'),
           ),
         ],
       ),
     );
-  }
-}
-
-class _LinkedStudentHome extends ConsumerWidget {
-  const _LinkedStudentHome({required this.student});
-  final StudentEntity student;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final assignmentsAsync =
-        ref.watch(studentAssignmentsStreamProvider(student.id));
-    final examsAsync = ref.watch(
-      studentExamsStreamProvider((studentId: student.id, teacherId: null)),
-    );
-    final goalAsync = ref.watch(studentGoalStreamProvider(student.id));
-
-    final assignments = assignmentsAsync.asData?.value ?? const [];
-    final exams = examsAsync.asData?.value ?? const [];
-    final goal = goalAsync.asData?.value;
-
-    final pendingCount =
-        assignments.where((a) => a.status != 'completed').length;
-    final completedCount =
-        assignments.where((a) => a.status == 'completed').length;
-    final lastNet = exams.isNotEmpty ? exams.first.totalNet : null;
-    final goalPct = _goalPercent(goal);
-
-    final schoolNo = student.schoolNumber != null
-        ? 'Okul No: ${student.schoolNumber}'
-        : 'Sınıf: ${student.classId}';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppColors.parentSurface,
-            borderRadius: BorderRadius.circular(AppSizes.cardRadius),
-            border: Border.all(
-                color: AppColors.parentPrimary.withValues(alpha: 0.3)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: const BoxDecoration(
-                  color: AppColors.parentPrimary,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.face_rounded,
-                    color: Colors.white, size: 26),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Bağlı Öğrenci Profili',
-                        style: AppTextStyles.labelSmall),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${student.name} (${student.classId} Sınıfı)',
-                      style: AppTextStyles.h4.copyWith(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.parentPrimary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  schoolNo,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.parentPrimary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 24),
-        const _ParentSectionTitle('Özet Durumu'),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _ParentSummaryCard(
-                label: 'Açık Ödev',
-                value: '$pendingCount',
-                icon: Icons.assignment_rounded,
-                color: AppColors.parentPrimary,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _ParentSummaryCard(
-                label: 'Tamamlanan',
-                value: '$completedCount',
-                icon: Icons.check_circle_rounded,
-                color: AppColors.success,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _ParentSummaryCard(
-                label: 'Son Deneme Net',
-                value: lastNet != null ? lastNet.toStringAsFixed(2) : '—',
-                icon: Icons.bar_chart_rounded,
-                color: AppColors.accent,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _ParentSummaryCard(
-                label: 'Hedef Başarısı',
-                value: goalPct != null ? '%$goalPct' : '—',
-                icon: Icons.track_changes_rounded,
-                color: AppColors.warning,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        const _ParentSectionTitle('Son Öğretmen Notu'),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(AppSizes.cardRadius),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.teacherPrimary.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.sticky_note_2_rounded,
-                    color: AppColors.teacherPrimary, size: 24),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Öğretmen Değerlendirmesi',
-                      style: AppTextStyles.labelLarge
-                          .copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      (student.teacherNote != null &&
-                              student.teacherNote!.trim().isNotEmpty)
-                          ? student.teacherNote!
-                          : 'Henüz öğretmen notu eklenmemiş.',
-                      style: AppTextStyles.bodySmall
-                          .copyWith(color: AppColors.textSecondary),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  int? _goalPercent(GoalEntity? goal) {
-    if (goal == null || goal.targetValue <= 0) return null;
-    final pct = ((goal.currentValue / goal.targetValue) * 100).round();
-    return pct.clamp(0, 999);
   }
 }
 
@@ -426,9 +457,13 @@ class _ParentSummaryCard extends StatelessWidget {
             children: [
               Icon(icon, color: color, size: 20),
               const Spacer(),
-              Text(
-                value,
-                style: AppTextStyles.h3.copyWith(color: color),
+              Flexible(
+                child: Text(
+                  value,
+                  style: AppTextStyles.h3.copyWith(color: color),
+                  textAlign: TextAlign.right,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),

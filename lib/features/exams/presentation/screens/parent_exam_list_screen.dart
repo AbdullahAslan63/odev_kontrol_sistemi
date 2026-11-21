@@ -83,7 +83,7 @@ class _ExamResultsBody extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Net Gelişim Grafiği', style: AppTextStyles.h3),
+          Text('Net Gelişim Grafiği 📈', style: AppTextStyles.h3),
           const SizedBox(height: 12),
           Container(
             height: 220,
@@ -152,7 +152,7 @@ class _ExamResultsBody extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          Text('Geçmiş Sınavlar', style: AppTextStyles.h3),
+          Text('Geçmiş Sınavlar 📝', style: AppTextStyles.h3),
           const SizedBox(height: 12),
           ...exams.map((exam) {
             return Container(
