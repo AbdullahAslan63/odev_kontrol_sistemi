@@ -289,26 +289,78 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<void> deleteAccount() async {
     final user = _auth.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      throw const AuthException('Oturum bulunamadı. Tekrar giriş yapın.');
+    }
 
     final uid = user.uid;
 
     try {
-      // 1. Firestore veritabanından kullanıcı belgelerini sil
-      await _users.doc(uid).delete();
-      await _firestore.collection('teacher_profiles').doc(uid).delete();
-      await _firestore.collection('parent_profiles').doc(uid).delete();
+      // Firebase Auth: uzun oturumlarda silme için yeniden doğrulama gerekir
+      await _reauthenticateForDelete(user);
 
-      // 2. Firebase Auth üzerinden hesabı kalıcı olarak sil
+      // Firestore profil temizliği (yoksa sessizce geç)
+      await _deleteDocQuietly(_firestore.collection('parent_profiles').doc(uid));
+      await _deleteDocQuietly(_firestore.collection('teacher_profiles').doc(uid));
+      await _deleteDocQuietly(_users.doc(uid));
+
       await user.delete();
-
-      // 3. Oturumu sonlandır
-      await _auth.signOut();
-    } catch (e) {
-      try {
-        await _auth.signOut();
-      } catch (_) {}
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'requires-recent-login') {
+        await _reauthenticateForDelete(user);
+        await user.delete();
+        return;
+      }
       throw _mapException(e);
+    } catch (e) {
+      throw _mapException(e);
+    }
+  }
+
+  Future<void> _deleteDocQuietly(DocumentReference<Map<String, dynamic>> ref) async {
+    try {
+      await ref.delete();
+    } catch (_) {}
+  }
+
+  /// Silme öncesi yeniden doğrulama (passless e-posta veya taze telefon oturumu).
+  Future<void> _reauthenticateForDelete(User user) async {
+    final email = user.email;
+    final providers = user.providerData.map((p) => p.providerId).toSet();
+
+    // Eski MatPusula passless veli hesapları
+    if (email != null &&
+        email.endsWith('@matpusula.app') &&
+        email.startsWith('parent_')) {
+      final phonePart = email.substring(
+        'parent_'.length,
+        email.indexOf('@'),
+      );
+      final credential = EmailAuthProvider.credential(
+        email: email,
+        password: 'MatPusula_Passless_$phonePart',
+      );
+      await user.reauthenticateWithCredential(credential);
+      return;
+    }
+
+    // Telefon ile giriş yapan veliler: silme için oturumun taze olması gerekir
+    if (providers.contains('phone')) {
+      final lastSignIn = user.metadata.lastSignInTime;
+      final isFresh = lastSignIn != null &&
+          DateTime.now().difference(lastSignIn) < const Duration(minutes: 5);
+      if (!isFresh) {
+        throw const AuthException(
+          'Telefon hesabını silmek için: çıkış yap → aynı numarayla tekrar giriş yap → hemen Hesabı Sil.',
+        );
+      }
+      return;
+    }
+
+    if (providers.contains('password')) {
+      try {
+        await user.reload();
+      } catch (_) {}
     }
   }
 
@@ -328,8 +380,8 @@ class AuthRepositoryImpl implements AuthRepository {
     required String phone,
   }) async {
     final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
-    final autoEmail = 'parent_${cleanPhone}@matpusula.app';
-    final autoPassword = 'MatPusula_Passless_${cleanPhone}';
+    final autoEmail = 'parent_$cleanPhone@matpusula.app';
+    final autoPassword = 'MatPusula_Passless_$cleanPhone';
 
     // 1. Önce var olan e-posta / şifre ile giriş yapmayı dene
     try {
@@ -431,7 +483,7 @@ class AuthRepositoryImpl implements AuthRepository {
         'title': 'LGS Üslü İfadeler Soru Bankası',
         'subject': 'Matematik',
         'description': 'Sayfa 45 - 62 Arası 40 Soru',
-        'sourceName': 'MatPusula Soru Bankası',
+        'sourceName': 'Eduly Soru Bankası',
         'questionRange': '40 Soru',
         'dueDate': Timestamp.fromDate(now.add(const Duration(days: 2))),
         'createdAt': Timestamp.fromDate(now),
@@ -485,7 +537,7 @@ class AuthRepositoryImpl implements AuthRepository {
         'teacherId': 'teacher_demo',
         'examName': 'LGS Kurumsal Deneme #3',
         'examDate': Timestamp.fromDate(now.subtract(const Duration(days: 3))),
-        'publisher': 'MatPusula Akademi',
+        'publisher': 'Eduly Akademi',
         'scores': {
           'Matematik': {'correct': 18, 'wrong': 2, 'blank': 0, 'net': 17.5},
           'Fen Bilimleri': {'correct': 19, 'wrong': 1, 'blank': 0, 'net': 18.75},
@@ -624,7 +676,11 @@ class AuthRepositoryImpl implements AuthRepository {
           const AuthException('İnternet bağlantısı kurulamadı. Bağlantınızı kontrol edin.'),
         'too-many-requests' =>
           const AuthException('Çok fazla hatalı deneme yapıldı. Lütfen daha sonra tekrar deneyin.'),
-        _ => AuthException('Giriş/Kayıt başarısız (${e.code}). Lütfen tekrar deneyin.'),
+        'requires-recent-login' =>
+          const AuthException(
+            'Güvenlik için yeniden giriş gerekli. Çıkış yapıp tekrar giriş yapın, sonra hesabı silin.',
+          ),
+        _ => AuthException('İşlem başarısız (${e.code}). Lütfen tekrar deneyin.'),
       };
     }
 

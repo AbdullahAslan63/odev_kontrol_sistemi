@@ -88,7 +88,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                 const MatPusulaLogo(size: 104),
                 const SizedBox(height: 20),
                 Text(
-                  'MatPusula',
+                  'Eduly',
                   style: AppTextStyles.h1.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),

@@ -149,7 +149,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Ödev Takip Sistemi (MatPusula) Gizlilik Bildirimi',
+                'Eduly Gizlilik Bildirimi',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
               ),
               SizedBox(height: 8),
@@ -205,10 +205,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
             onPressed: () async {
               Navigator.pop(ctx);
-              await ref.read(authRepositoryProvider).deleteAccount();
-              if (!mounted) return;
-              context.showSnackBar('Hesabınız ve profil verileriniz Firebase\'den kalıcı olarak silindi.');
-              context.go('/welcome');
+              try {
+                await ref.read(authRepositoryProvider).deleteAccount();
+                if (!mounted) return;
+                context.showSnackBar(
+                  'Hesabınız kalıcı olarak silindi.',
+                );
+                context.go('/welcome');
+              } catch (e) {
+                if (!mounted) return;
+                context.showSnackBar(
+                  e.toString().replaceFirst('Exception: ', ''),
+                  isError: true,
+                );
+              }
             },
             child: const Text('Hesabımı Sil', style: TextStyle(color: Colors.white)),
           ),
@@ -278,7 +288,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            user?.email ?? 'ornek@matpusula.com',
+                            user?.email ?? 'ornek@eduly.app',
                             style: AppTextStyles.bodySmall,
                           ),
                           const SizedBox(height: 8),

@@ -5,7 +5,6 @@ import 'package:odev_takip/features/auth/presentation/providers/auth_providers.d
 import 'package:odev_takip/core/theme/app_colors.dart';
 import 'package:odev_takip/core/theme/app_text_styles.dart';
 import 'package:odev_takip/core/theme/app_sizes.dart';
-import 'package:odev_takip/core/widgets/app_widgets.dart';
 import 'package:odev_takip/core/widgets/matpusula_logo.dart';
 
 import '../../../../core/widgets/notification_permission_dialog.dart';
@@ -77,7 +76,7 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
                         const MatPusulaLogo(size: 28),
                         const SizedBox(width: 8),
                         Text(
-                          'MatPusula',
+                          'Eduly',
                           style: AppTextStyles.h4.copyWith(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,

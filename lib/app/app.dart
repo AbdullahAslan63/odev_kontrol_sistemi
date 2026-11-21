@@ -13,7 +13,7 @@ class App extends ConsumerWidget {
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(
-      title: 'Ödev Takip',
+      title: 'Eduly',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
 

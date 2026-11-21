@@ -57,7 +57,7 @@ class ParentHomeworkListScreen extends ConsumerWidget {
       title: 'LGS Üslü İfadeler Soru Bankası',
       subject: 'Matematik',
       description: 'LGS hazırlık soruları',
-      sourceName: 'MatPusula Soru Bankası',
+      sourceName: 'Eduly Soru Bankası',
       questionRange: 'Sayfa 45 - 62 (40 Soru)',
       dueDate: DateTime.now().add(const Duration(days: 2)),
       createdAt: DateTime.now(),

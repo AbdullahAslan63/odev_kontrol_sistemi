@@ -3,163 +3,123 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ── Yardımcı fonksiyonlar ──────────────────────────────────────────────
-
-    // Kullanıcı oturum açmış mı?
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    // Kullanıcı kim olduğunu doğrula
+    function userExists() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
     function getUserRole() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
-    // Öğretmen mi?
     function isTeacher() {
-      return isAuthenticated() && getUserRole() == 'teacher';
+      return userExists() && getUserRole() == 'teacher';
     }
 
-    // Veli mi?
     function isParent() {
-      return isAuthenticated() && getUserRole() == 'parent';
+      return userExists() && getUserRole() == 'parent';
     }
 
-    // Kendi kaydı mı?
     function isOwner(uid) {
       return isAuthenticated() && request.auth.uid == uid;
     }
 
-    // Öğretmen bu öğrenciye sahip mi?
-    function isTeacherOfStudent(studentId) {
-      return isTeacher() &&
-        get(/databases/$(database)/documents/students/$(studentId)).data.teacherId == request.auth.uid;
+    // Role yoksa / users doc gecikmeli yazıldıysa bile kendi teacherId verisine erişim
+    function ownsTeacherData() {
+      return isAuthenticated() && resource.data.teacherId == request.auth.uid;
     }
 
-    // Veli bu öğrenciye bağlı mı?
-    function isParentOfStudent(studentId) {
-      return isParent() &&
-        request.auth.uid in get(/databases/$(database)/documents/students/$(studentId)).data.parentIds;
+    function createsAsSelfTeacher() {
+      return isAuthenticated() && request.resource.data.teacherId == request.auth.uid;
     }
 
-    // ── users koleksiyonu ──────────────────────────────────────────────────
     match /users/{uid} {
       allow read: if isOwner(uid);
       allow create: if isOwner(uid);
       allow update: if isOwner(uid);
-      allow delete: if false; // Hesap silme Cloud Functions üzerinden yapılır
+      allow delete: if isOwner(uid);
     }
 
-    // ── teacher_profiles koleksiyonu ───────────────────────────────────────
     match /teacher_profiles/{uid} {
       allow read: if isOwner(uid);
       allow write: if isOwner(uid);
     }
 
-    // ── parent_profiles koleksiyonu ────────────────────────────────────────
     match /parent_profiles/{uid} {
       allow read: if isOwner(uid);
       allow write: if isOwner(uid);
     }
 
-    // ── classes koleksiyonu ────────────────────────────────────────────────
     match /classes/{classId} {
       allow read: if isAuthenticated() &&
-        (resource.data.teacherId == request.auth.uid || isTeacher());
-      allow create: if isTeacher();
-      allow update: if isTeacher() && resource.data.teacherId == request.auth.uid;
-      allow delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
+        (resource.data.teacherId == request.auth.uid || isParent());
+      allow create: if isAuthenticated() && createsAsSelfTeacher();
+      allow update, delete: if ownsTeacherData();
     }
 
-    // ── students koleksiyonu ───────────────────────────────────────────────
     match /students/{studentId} {
       allow read: if isAuthenticated();
-      allow create: if isTeacher();
-      allow update: if (isTeacher() && resource.data.teacherId == request.auth.uid) ||
-                      (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['parentIds']));
-      allow delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
+      allow create: if isAuthenticated() && createsAsSelfTeacher();
+      allow update: if ownsTeacherData() ||
+        (isAuthenticated() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['parentIds']));
+      allow delete: if ownsTeacherData();
     }
 
-    // ── invite_codes koleksiyonu ───────────────────────────────────────────
     match /invite_codes/{code} {
-      // Veliler kayıt olmadan önce davet kodunu doğrular (oturum açılmamış olabilir)
       allow read: if true;
-      allow create: if isTeacher();
+      allow create: if isAuthenticated();
       allow update: if true;
     }
 
-    // ── homeworks koleksiyonu ──────────────────────────────────────────────
+    // Ödevler — teacherId eşleşmesi (role get() bağımlılığı kaldırıldı)
     match /homeworks/{homeworkId} {
-      allow read: if isTeacher() && resource.data.teacherId == request.auth.uid;
-      allow create: if isTeacher();
-      allow update: if isTeacher() && resource.data.teacherId == request.auth.uid;
-      allow delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
+      allow read: if ownsTeacherData() || isParent();
+      allow create: if createsAsSelfTeacher();
+      allow update, delete: if ownsTeacherData();
     }
 
-    // ── homework_assignments koleksiyonu ───────────────────────────────────
     match /homework_assignments/{assignmentId} {
-      allow read: if isTeacher() && resource.data.teacherId == request.auth.uid;
-      allow create: if isTeacher();
-      allow update: if isTeacher() && resource.data.teacherId == request.auth.uid;
-      allow delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
-
-      // Veli okuma erişimi
-      allow read: if isParent();
+      allow read: if ownsTeacherData() || isParent();
+      allow create: if createsAsSelfTeacher();
+      allow update, delete: if ownsTeacherData();
     }
 
-    // ── exam_results koleksiyonu ───────────────────────────────────────────
     match /exam_results/{examId} {
-      allow read: if isTeacher() && resource.data.teacherId == request.auth.uid;
-      allow create: if isTeacher();
-      allow update: if isTeacher() && resource.data.teacherId == request.auth.uid;
-      allow delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
-
-      allow read: if isParent();
+      allow read: if ownsTeacherData() || isParent();
+      allow create: if createsAsSelfTeacher();
+      allow update, delete: if ownsTeacherData();
     }
 
-    // ── subject_progress koleksiyonu ───────────────────────────────────────
     match /subject_progress/{progressId} {
-      allow read: if isTeacher() && resource.data.teacherId == request.auth.uid;
-      allow create: if isTeacher();
-      allow update: if isTeacher() && resource.data.teacherId == request.auth.uid;
-      allow delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
-
-      allow read: if isParent();
+      allow read: if ownsTeacherData() || isParent();
+      allow create: if createsAsSelfTeacher();
+      allow update, delete: if ownsTeacherData();
     }
 
-    // ── goals koleksiyonu ──────────────────────────────────────────────────
     match /goals/{goalId} {
-      allow read: if isTeacher() && resource.data.teacherId == request.auth.uid;
-      allow create: if isTeacher();
-      allow update: if isTeacher() && resource.data.teacherId == request.auth.uid;
-      allow delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
-
-      allow read: if isParent();
+      allow read: if ownsTeacherData() || isParent();
+      allow create: if createsAsSelfTeacher();
+      allow update, delete: if ownsTeacherData();
     }
 
-    // ── messages koleksiyonu ───────────────────────────────────────────────
     match /messages/{messageId} {
-      allow read: if isTeacher() && resource.data.teacherId == request.auth.uid;
-      allow create: if isTeacher();
-      allow update: if isTeacher() && resource.data.teacherId == request.auth.uid;
-
-      // Veli yalnızca kendisine gönderilen mesajları okuyabilir
-      allow read: if isParent() &&
-        request.auth.uid in resource.data.parentIds;
+      allow read: if ownsTeacherData() ||
+        (isParent() && request.auth.uid in resource.data.parentIds);
+      allow create: if createsAsSelfTeacher();
+      allow update: if ownsTeacherData();
     }
 
-    // ── notifications koleksiyonu ──────────────────────────────────────────
     match /notifications/{notificationId} {
-      // Yalnızca hedef kullanıcı kendi bildirimlerini okuyabilir
-      allow read: if isAuthenticated() &&
-        resource.data.userId == request.auth.uid;
-      // Öğretmen bildirim oluşturabilir (Cloud Functions üzerinden tercih edilir)
-      allow create: if isTeacher();
-      // Okundu işareti — yalnızca hedef kullanıcı
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated();
       allow update: if isAuthenticated() &&
         resource.data.userId == request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
     }
-
   }
 }

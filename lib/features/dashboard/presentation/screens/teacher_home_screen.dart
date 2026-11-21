@@ -62,7 +62,7 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                         const MatPusulaLogo(size: 28),
                         const SizedBox(width: 8),
                         Text(
-                          'MatPusula',
+                          'Eduly',
                           style: AppTextStyles.h4.copyWith(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,

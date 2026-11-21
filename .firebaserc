@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "odevtakipsistemi-b93b2"
+    "default": "eduly-server",
+    "legacy": "odevtakipsistemi-b93b2"
   }
 }

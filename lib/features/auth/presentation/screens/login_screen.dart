@@ -154,7 +154,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     const MatPusulaLogo(size: 84),
                     const SizedBox(height: 12),
                     Text(
-                      'MatPusula',
+                      'Eduly',
                       style: AppTextStyles.h1.copyWith(
                         color: activeColor,
                         fontWeight: FontWeight.bold,

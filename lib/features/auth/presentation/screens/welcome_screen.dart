@@ -75,7 +75,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                     const SizedBox(height: 24),
 
                     Text(
-                      'MatPusula',
+                      'Eduly',
                       style: AppTextStyles.h1.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
