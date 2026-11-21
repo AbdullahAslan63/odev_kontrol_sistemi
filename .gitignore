@@ -46,11 +46,10 @@ app.*.map.json
 /web-dashboard/node_modules/
 /web-dashboard/dist/
 
-# ── Firebase yapılandırma dosyaları (GİZLİ — asla commit etme) ─
-**/google-services.json
-**/GoogleService-Info.plist
+# ── Firebase admin/secret (client plist/json CI için commit edilir) ─
 **/*firebase-adminsdk*.json
 **/serviceAccountKey.json
+# Android google-services.json hâlâ local-only (eski paket); iOS plist commit edilir.
 
 # ── PostgreSQL Docker verileri ─────────────────────────────────
 postgres_data/
@@ -61,6 +60,8 @@ odev_kontrol_sistemi/
 # Apple / CI secrets
 *.p8
 AuthKey_*.p8
+*.pem
 secrets/
 codemagic.yaml.local
+API_KEY/
 
