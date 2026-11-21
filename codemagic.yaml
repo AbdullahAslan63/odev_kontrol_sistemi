@@ -38,10 +38,13 @@ workflows:
           xcode-project use-profiles
       - name: Flutter pub get
         script: |
+          flutter config --no-enable-swift-package-manager
           flutter pub get
       - name: Install CocoaPods dependencies
         script: |
-          find . -name "Podfile" -execdir pod install \;
+          cd ios
+          rm -f Podfile.lock
+          pod install --repo-update
       - name: Analyze + test
         script: |
           flutter analyze
@@ -49,6 +52,8 @@ workflows:
       - name: Build signed IPA
         script: |
           BUILD_NO="${PROJECT_BUILD_NUMBER:-$BUILD_NUMBER}"
+          flutter config --no-enable-swift-package-manager
+          cd ios && pod install && cd ..
           flutter build ipa --release \
             --build-name=1.0.1 \
             --build-number="$BUILD_NO" \
