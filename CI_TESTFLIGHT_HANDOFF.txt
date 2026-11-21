@@ -1,0 +1,31 @@
+EDULY — Mac'siz TestFlight (YAYIN YOK)
+=====================================
+
+Hazır:
+- Kod: analyze 0 / test 27-27 (son kontrol CI'da tekrar)
+- iOS bundle: com.eduly.mobile (ASC ile aynı)
+- version: 1.0.1+3
+- codemagic.yaml + ios/ExportOptions.plist
+- ASC API Key: Eduly CI
+    Issuer ID : 9ea68bff-0cc0-4875-82b9-794881555f4c
+    Key ID    : 3D7L4VWB3L
+    Role      : App Manager
+- Privacy HTML: https://cdn.jsdelivr.net/gh/AbdullahAslan63/odev_kontrol_sistemi@main/docs/privacy.html
+- AAB (Android): build/app/outputs/bundle/release/app-release.aab
+  NOT: Play listing com.eduly.app ≠ AAB com.odevtakip.odev_takip
+
+Senin sıradaki (Codemagic):
+1. ASC → Integrations → Eduly CI → Download .p8 (bir kez)
+2. codemagic.io → GitHub odev_kontrol_sistemi
+3. appstore_credentials group:
+   APP_STORE_CONNECT_ISSUER_ID
+   APP_STORE_CONNECT_KEY_IDENTIFIER
+   APP_STORE_CONNECT_PRIVATE_KEY
+   APPLE_TEAM_ID (developer.apple.com Membership)
+4. Code signing: ASC API / automatic
+5. Start build → TestFlight Update (telefonda)
+6. ASLA "Submit for Review" / Production publish yapma (şimdilik)
+
+Screenshots (ASC upload):
+  assets/images/screenshots/asc/iphone67_*.png
+  assets/images/eduly_app_icon_1024.png
