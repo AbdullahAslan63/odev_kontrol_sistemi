@@ -62,6 +62,7 @@ class AppConstants {
 
   // ── Uygulama bilgileri ────────────────────────────────────────────────────
   static const String supportEmail = 'destek@odevtakip.com';
-  static const String privacyPolicyUrl = 'https://odevtakip.com/gizlilik';
+  static const String privacyPolicyUrl =
+      'https://cdn.jsdelivr.net/gh/AbdullahAslan63/odev_kontrol_sistemi@main/docs/privacy.html';
   static const String termsUrl = 'https://odevtakip.com/kosullar';
 }
