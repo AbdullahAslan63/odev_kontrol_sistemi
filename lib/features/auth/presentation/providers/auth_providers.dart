@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../domain/entities/app_user.dart';
@@ -182,6 +183,30 @@ class ParentAuthNotifier extends StateNotifier<AuthState> {
       state = state.error(e.message);
     } catch (_) {
       state = state.error('Telefon ile giriş yapılırken bir hata oluştu.');
+    }
+  }
+
+  /// Öğretmen davet koduyla gerçek öğrenciyi veli hesabına bağlar
+  Future<bool> linkChildWithInviteCode(String inviteCode) async {
+    state = state.loading;
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null || uid.isEmpty) {
+        state = state.error('Önce veli girişi yapmalısınız.');
+        return false;
+      }
+      await _repo.linkParentWithInviteCode(
+        parentUid: uid,
+        inviteCode: inviteCode,
+      );
+      state = state.success;
+      return true;
+    } on AuthException catch (e) {
+      state = state.error(e.message);
+      return false;
+    } catch (_) {
+      state = state.error('Öğrenci bağlanırken bir hata oluştu.');
+      return false;
     }
   }
 

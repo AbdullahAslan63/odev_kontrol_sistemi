@@ -18,7 +18,9 @@ class AnalyticsGraphScreen extends ConsumerWidget {
     final user = ref.watch(currentUserProvider);
     final teacherId = user?.isTeacher == true ? user?.uid : null;
     final studentAsync = ref.watch(studentStreamProvider(studentId));
-    final examsAsync = ref.watch(studentExamsStreamProvider(studentId, teacherId: teacherId));
+    final examsAsync = ref.watch(
+      studentExamsStreamProvider((studentId: studentId, teacherId: teacherId)),
+    );
     final goalAsync = ref.watch(studentGoalStreamProvider(studentId));
 
     return Scaffold(

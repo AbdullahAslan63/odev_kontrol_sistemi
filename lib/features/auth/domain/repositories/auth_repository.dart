@@ -49,4 +49,10 @@ abstract class AuthRepository {
 
   /// Davet kodunu doğrula
   Future<Map<String, dynamic>?> validateInviteCode(String code);
+
+  /// Mevcut veli hesabını öğretmen davet koduyla gerçek öğrenciye bağla
+  Future<void> linkParentWithInviteCode({
+    required String parentUid,
+    required String inviteCode,
+  });
 }

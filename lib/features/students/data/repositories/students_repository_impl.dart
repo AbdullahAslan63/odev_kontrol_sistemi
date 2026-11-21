@@ -48,16 +48,24 @@ class StudentsRepositoryImpl implements StudentsRepository {
   }
 
   @override
-  Stream<List<StudentEntity>> getParentStudents(String parentUid) {
-    if (parentUid.isEmpty) return Stream.value([]);
-    return _studentsRef
-        .where('parentIds', arrayContains: parentUid)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => StudentModel.fromFirestore(doc))
-          .toList();
-    }).handleError((_) => <StudentEntity>[]);
+  Stream<List<StudentEntity>> getParentStudents(String parentUid) async* {
+    if (parentUid.isEmpty) {
+      yield const [];
+      return;
+    }
+    try {
+      await for (final snapshot in _studentsRef
+          .where('parentIds', arrayContains: parentUid)
+          .snapshots()) {
+        yield snapshot.docs
+            .map((doc) => StudentModel.fromFirestore(doc))
+            // Eski demo kayıtlarını (Mustafa / teacher_demo) gösterme
+            .where((s) => s.teacherId != 'teacher_demo')
+            .toList();
+      }
+    } catch (_) {
+      yield const [];
+    }
   }
 
   @override

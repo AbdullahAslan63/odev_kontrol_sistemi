@@ -13,21 +13,27 @@ class ExamsRepositoryImpl implements ExamsRepository {
       _firestore.collection('exam_results');
 
   @override
-  Stream<List<ExamResultEntity>> getStudentExams(String studentId, {String? teacherId}) {
-    if (studentId.isEmpty) return Stream.value([]);
-    Query<Map<String, dynamic>> query = _examsRef.where('studentId', isEqualTo: studentId);
+  Stream<List<ExamResultEntity>> getStudentExams(String studentId, {String? teacherId}) async* {
+    if (studentId.isEmpty) {
+      yield const [];
+      return;
+    }
+    Query<Map<String, dynamic>> query =
+        _examsRef.where('studentId', isEqualTo: studentId);
     if (teacherId != null && teacherId.isNotEmpty) {
       query = query.where('teacherId', isEqualTo: teacherId);
     }
-    return query
-        .snapshots()
-        .map((snapshot) {
-      final list = snapshot.docs
-          .map((doc) => ExamResultModel.fromFirestore(doc))
-          .toList();
-      list.sort((a, b) => b.examDate.compareTo(a.examDate));
-      return list;
-    }).handleError((_) => <ExamResultEntity>[]);
+    try {
+      await for (final snapshot in query.snapshots()) {
+        final list = snapshot.docs
+            .map((doc) => ExamResultModel.fromFirestore(doc))
+            .toList();
+        list.sort((a, b) => b.examDate.compareTo(a.examDate));
+        yield list;
+      }
+    } catch (_) {
+      yield const [];
+    }
   }
 
   @override

@@ -61,18 +61,24 @@ class HomeworksRepositoryImpl implements HomeworksRepository {
 
   @override
   Stream<List<HomeworkAssignmentEntity>> getStudentAssignments(
-      String studentId) {
-    if (studentId.isEmpty) return Stream.value([]);
-    return _assignmentsRef
-        .where('studentId', isEqualTo: studentId)
-        .snapshots()
-        .map((snapshot) {
-      final list = snapshot.docs
-          .map((doc) => HomeworkAssignmentModel.fromFirestore(doc))
-          .toList();
-      list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-      return list;
-    }).handleError((_) => <HomeworkAssignmentEntity>[]);
+      String studentId) async* {
+    if (studentId.isEmpty) {
+      yield const [];
+      return;
+    }
+    try {
+      await for (final snapshot in _assignmentsRef
+          .where('studentId', isEqualTo: studentId)
+          .snapshots()) {
+        final list = snapshot.docs
+            .map((doc) => HomeworkAssignmentModel.fromFirestore(doc))
+            .toList();
+        list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+        yield list;
+      }
+    } catch (_) {
+      yield const [];
+    }
   }
 
   @override

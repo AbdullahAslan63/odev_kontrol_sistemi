@@ -2,7 +2,7 @@ name: odev_takip
 description: "Eduly — okullar ve eğitim kurumları için ödev, deneme ve veli takip platformu."
 publish_to: 'none'
 
-version: 1.0.1+3
+version: 1.0.1+5
 
 environment:
   sdk: '>=3.3.0 <4.0.0'

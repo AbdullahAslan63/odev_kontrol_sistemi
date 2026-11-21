@@ -390,7 +390,10 @@ class AuthRepositoryImpl implements AuthRepository {
         password: autoPassword,
       );
       final user = await getUserProfile(credential.user!.uid);
-      if (user != null) return user;
+      if (user != null) {
+        await _purgeDemoStudentsForParent(user.uid);
+        return user;
+      }
     } catch (_) {}
 
     // 2. Telefon numarası eşleşen veritabanı kullanıcısını ara
@@ -408,12 +411,16 @@ class AuthRepositoryImpl implements AuthRepository {
             password: autoPassword,
           );
           final user = await getUserProfile(credential.user!.uid);
-          if (user != null) return user;
+          if (user != null) {
+            await _purgeDemoStudentsForParent(user.uid);
+            return user;
+          }
         }
       }
     } catch (_) {}
 
     // 3. Kullanıcı yoksa otomatik şifresiz Veli hesabı oluştur
+    // Öğrenci SADECE öğretmen davet koduyla bağlanır — sahte Mustafa/demo yok.
     User? createdUser;
     try {
       final credential = await _auth.createUserWithEmailAndPassword(
@@ -445,140 +452,25 @@ class AuthRepositoryImpl implements AuthRepository {
           'name': displayName,
           'email': autoEmail,
           'phone': phone.trim(),
+          'studentIds': <String>[],
           'createdAt': now.toIso8601String(),
         },
       );
-
-      // Gerçek Öğrenci Belgesi Oluştur ve Firestore'a Bağla
-      final studentDoc = _firestore.collection('students').doc();
-      final studentId = studentDoc.id;
-
-      batch.set(studentDoc, {
-        'id': studentId,
-        'classId': '8-B',
-        'teacherId': 'teacher_demo',
-        'name': 'Mustafa Yıldız',
-        'schoolNumber': '354',
-        'phone': phone.trim(),
-        'parentIds': [createdUser.uid],
-        'targetScore': 480.0,
-        'teacherNote': 'Matematik dersinde üslü ifadeler ve çarpanlara ayırma konularında gayet başarılı.',
-        'createdAt': Timestamp.fromDate(now),
-      });
-
-      batch.set(
-        _firestore.collection('parent_profiles').doc(createdUser.uid),
-        {
-          'studentIds': [studentId],
-        },
-        SetOptions(merge: true),
-      );
-
-      // Firestore'a Ödevler Ekle
-      final hw1Doc = _firestore.collection('homeworks').doc('hw_${createdUser.uid}_1');
-      batch.set(hw1Doc, {
-        'id': 'hw_${createdUser.uid}_1',
-        'teacherId': 'teacher_demo',
-        'classId': '8-B',
-        'title': 'LGS Üslü İfadeler Soru Bankası',
-        'subject': 'Matematik',
-        'description': 'Sayfa 45 - 62 Arası 40 Soru',
-        'sourceName': 'Eduly Soru Bankası',
-        'questionRange': '40 Soru',
-        'dueDate': Timestamp.fromDate(now.add(const Duration(days: 2))),
-        'createdAt': Timestamp.fromDate(now),
-      });
-
-      final assign1Doc = _firestore.collection('homework_assignments').doc('assign_${createdUser.uid}_1');
-      batch.set(assign1Doc, {
-        'id': 'assign_${createdUser.uid}_1',
-        'homeworkId': 'hw_${createdUser.uid}_1',
-        'studentId': studentId,
-        'classId': '8-B',
-        'teacherId': 'teacher_demo',
-        'status': 'pending',
-        'teacherNote': 'Cuma gününe kadar yıldızlı soruları mutlaka çözün.',
-        'updatedAt': Timestamp.fromDate(now),
-      });
-
-      final hw2Doc = _firestore.collection('homeworks').doc('hw_${createdUser.uid}_2');
-      batch.set(hw2Doc, {
-        'id': 'hw_${createdUser.uid}_2',
-        'teacherId': 'teacher_demo',
-        'classId': '8-B',
-        'title': 'Mevsimler ve İklim Test Çözümü',
-        'subject': 'Fen Bilimleri',
-        'description': 'Karakök Fasikül Test 3',
-        'sourceName': 'Karakök Yayınları',
-        'questionRange': '30 Soru',
-        'dueDate': Timestamp.fromDate(now.subtract(const Duration(days: 1))),
-        'createdAt': Timestamp.fromDate(now.subtract(const Duration(days: 2))),
-      });
-
-      final assign2Doc = _firestore.collection('homework_assignments').doc('assign_${createdUser.uid}_2');
-      batch.set(assign2Doc, {
-        'id': 'assign_${createdUser.uid}_2',
-        'homeworkId': 'hw_${createdUser.uid}_2',
-        'studentId': studentId,
-        'classId': '8-B',
-        'teacherId': 'teacher_demo',
-        'status': 'completed',
-        'completedAt': Timestamp.fromDate(now.subtract(const Duration(days: 1))),
-        'teacherNote': 'Tüm sorular eksiksiz ve doğru çözülmüş, tebrikler.',
-        'updatedAt': Timestamp.fromDate(now.subtract(const Duration(days: 1))),
-      });
-
-      // Firestore'a Sınav Sonuçları Ekle
-      final exam1Doc = _firestore.collection('exam_results').doc('exam_${createdUser.uid}_1');
-      batch.set(exam1Doc, {
-        'id': 'exam_${createdUser.uid}_1',
-        'studentId': studentId,
-        'classId': '8-B',
-        'teacherId': 'teacher_demo',
-        'examName': 'LGS Kurumsal Deneme #3',
-        'examDate': Timestamp.fromDate(now.subtract(const Duration(days: 3))),
-        'publisher': 'Eduly Akademi',
-        'scores': {
-          'Matematik': {'correct': 18, 'wrong': 2, 'blank': 0, 'net': 17.5},
-          'Fen Bilimleri': {'correct': 19, 'wrong': 1, 'blank': 0, 'net': 18.75},
-          'Türkçe': {'correct': 19, 'wrong': 1, 'blank': 0, 'net': 18.75},
-        },
-        'totalNet': 85.50,
-        'totalScore': 442.5,
-        'createdAt': Timestamp.fromDate(now.subtract(const Duration(days: 3))),
-      });
-
-      final exam2Doc = _firestore.collection('exam_results').doc('exam_${createdUser.uid}_2');
-      batch.set(exam2Doc, {
-        'id': 'exam_${createdUser.uid}_2',
-        'studentId': studentId,
-        'classId': '8-B',
-        'teacherId': 'teacher_demo',
-        'examName': 'Matematik Özel Branş Denemesi #2',
-        'examDate': Timestamp.fromDate(now.subtract(const Duration(days: 10))),
-        'publisher': 'Pusula Yayınları',
-        'scores': {
-          'Matematik': {'correct': 17, 'wrong': 3, 'blank': 0, 'net': 16.25},
-          'Fen Bilimleri': {'correct': 18, 'wrong': 2, 'blank': 0, 'net': 17.5},
-          'Türkçe': {'correct': 18, 'wrong': 2, 'blank': 0, 'net': 17.5},
-        },
-        'totalNet': 78.00,
-        'totalScore': 415.0,
-        'createdAt': Timestamp.fromDate(now.subtract(const Duration(days: 10))),
-      });
-
       await batch.commit();
-
       return userModel;
     } catch (e) {
-      if (e is FirebaseAuthException && (e.code == 'email-already-in-use' || e.code == 'EMAIL_EXISTS')) {
+      if (e is FirebaseAuthException &&
+          (e.code == 'email-already-in-use' || e.code == 'EMAIL_EXISTS')) {
         try {
           final credential = await _auth.signInWithEmailAndPassword(
             email: autoEmail,
             password: autoPassword,
           );
           final user = await getUserProfile(credential.user!.uid);
-          if (user != null) return user;
+          if (user != null) {
+            await _purgeDemoStudentsForParent(user.uid);
+            return user;
+          }
         } catch (_) {}
       }
       if (createdUser != null) {
@@ -586,6 +478,107 @@ class AuthRepositoryImpl implements AuthRepository {
           await createdUser.delete();
         } catch (_) {}
       }
+      throw _mapException(e);
+    }
+  }
+
+  /// Eski demo (Mustafa Yıldız / teacher_demo) kayıtlarını veliden temizler.
+  Future<void> _purgeDemoStudentsForParent(String parentUid) async {
+    try {
+      final snap = await _firestore
+          .collection('students')
+          .where('parentIds', arrayContains: parentUid)
+          .get();
+
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        if (data['teacherId'] != 'teacher_demo') continue;
+
+        final studentId = doc.id;
+        final batch = _firestore.batch();
+
+        final assigns = await _firestore
+            .collection('homework_assignments')
+            .where('studentId', isEqualTo: studentId)
+            .get();
+        for (final a in assigns.docs) {
+          batch.delete(a.reference);
+        }
+
+        final exams = await _firestore
+            .collection('exam_results')
+            .where('studentId', isEqualTo: studentId)
+            .get();
+        for (final e in exams.docs) {
+          batch.delete(e.reference);
+        }
+
+        batch.delete(_firestore.collection('homeworks').doc('hw_${parentUid}_1'));
+        batch.delete(_firestore.collection('homeworks').doc('hw_${parentUid}_2'));
+        batch.delete(doc.reference);
+        await batch.commit();
+      }
+
+      // parent_profiles.studentIds'i gerçek bağlantılara göre yenile
+      final realSnap = await _firestore
+          .collection('students')
+          .where('parentIds', arrayContains: parentUid)
+          .get();
+      final realIds = realSnap.docs
+          .where((d) => d.data()['teacherId'] != 'teacher_demo')
+          .map((d) => d.id)
+          .toList();
+      await _firestore.collection('parent_profiles').doc(parentUid).set(
+        {'studentIds': realIds},
+        SetOptions(merge: true),
+      );
+    } catch (_) {
+      // Temizlik başarısız olsa girişe engel olma
+    }
+  }
+
+  @override
+  Future<void> linkParentWithInviteCode({
+    required String parentUid,
+    required String inviteCode,
+  }) async {
+    try {
+      final normalized = inviteCode.trim().toUpperCase();
+      final codeData = await validateInviteCode(normalized);
+      if (codeData == null) {
+        throw const AuthException('Geçersiz davet kodu.');
+      }
+
+      final studentId = codeData['studentId'] as String?;
+      if (studentId == null || studentId.isEmpty) {
+        throw const AuthException('Davet kodunda öğrenci bilgisi yok.');
+      }
+
+      final studentRef = _firestore.collection('students').doc(studentId);
+      final studentDoc = await studentRef.get();
+      if (!studentDoc.exists) {
+        throw const AuthException('Davet kodundaki öğrenci bulunamadı.');
+      }
+
+      final now = DateTime.now();
+      final batch = _firestore.batch();
+      batch.update(studentRef, {
+        'parentIds': FieldValue.arrayUnion([parentUid]),
+      });
+      batch.set(
+        _firestore.collection('parent_profiles').doc(parentUid),
+        {
+          'studentIds': FieldValue.arrayUnion([studentId]),
+        },
+        SetOptions(merge: true),
+      );
+      batch.update(_inviteCodes.doc(normalized), {
+        'used': true,
+        'usedBy': parentUid,
+        'usedAt': now.toIso8601String(),
+      });
+      await batch.commit();
+    } catch (e) {
       throw _mapException(e);
     }
   }

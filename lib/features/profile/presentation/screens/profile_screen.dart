@@ -8,6 +8,7 @@ import '../../../../core/widgets/app_buttons.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../../../core/extensions/extensions.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
+import '../../../students/presentation/providers/student_providers.dart';
 
 /// MatPusula Profil & Ayarlar Ekranı
 /// Öğretmen ve Veli için özel özelleştirilmiş ayarlar menüsü
@@ -22,55 +23,108 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _notificationsEnabled = true;
   bool _homeworkAlertsEnabled = true;
 
-  void _showAddChildDialog() {
+  Future<void> _showAddChildDialog() async {
     final codeController = TextEditingController();
-    showDialog(
+    var isSubmitting = false;
+
+    await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.person_add_rounded, color: AppColors.parentPrimary),
-            SizedBox(width: 8),
-            Text('Yeni Öğrenci/Çocuk Ekle'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Öğretmeninizden aldığınız 6 haneli davet kodunu girin:',
-              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 16),
-            AppTextField(
-              label: 'Davet Kodu',
-              hint: 'Örn: OT-A7K9M2',
-              controller: codeController,
-              prefixIcon: const Icon(Icons.key_rounded, color: AppColors.parentPrimary),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('İptal'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.parentPrimary,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            onPressed: () {
-              if (codeController.text.trim().isEmpty) return;
-              Navigator.pop(ctx);
-              context.showSnackBar('Davet kodu başarıyla doğrulandı ve öğrenci eklendi! 🎉');
-            },
-            child: const Text('Ekle', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20)),
+              title: const Row(
+                children: [
+                  Icon(Icons.person_add_rounded,
+                      color: AppColors.parentPrimary),
+                  SizedBox(width: 8),
+                  Expanded(child: Text('Yeni Öğrenci/Çocuk Ekle')),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Öğretmeninizden aldığınız davet kodunu girin:',
+                    style: TextStyle(
+                        fontSize: 13, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 16),
+                  AppTextField(
+                    label: 'Davet Kodu',
+                    hint: 'Örn: OT-A7K9M2',
+                    controller: codeController,
+                    prefixIcon: const Icon(Icons.key_rounded,
+                        color: AppColors.parentPrimary),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed:
+                      isSubmitting ? null : () => Navigator.pop(ctx),
+                  child: const Text('İptal'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.parentPrimary,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          final code = codeController.text.trim();
+                          if (code.isEmpty) return;
+                          setDialogState(() => isSubmitting = true);
+                          final ok = await ref
+                              .read(parentAuthProvider.notifier)
+                              .linkChildWithInviteCode(code);
+                          if (!ctx.mounted) return;
+                          Navigator.pop(ctx);
+                          if (!mounted) return;
+                          if (ok) {
+                            ref.invalidate(
+                              parentStudentsStreamProvider(
+                                ref.read(currentUserProvider)?.uid ?? '',
+                              ),
+                            );
+                            context.showSnackBar(
+                              'Öğrenci başarıyla bağlandı.',
+                            );
+                          } else {
+                            final err = ref
+                                .read(parentAuthProvider)
+                                .errorMessage;
+                            context.showSnackBar(
+                              err ?? 'Davet kodu bağlanamadı.',
+                              isError: true,
+                            );
+                            ref
+                                .read(parentAuthProvider.notifier)
+                                .clearError();
+                          }
+                        },
+                  child: isSubmitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Ekle',
+                          style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -317,32 +371,90 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
               // ── Veli Özel: Çocuk Bağlantısı ve Yeni Çocuk Ekleme ────────
               if (!isTeacher) ...[
-                _buildSettingsGroup('Öğrenci / Çocuk Bağlantıları', [
-                  ListTile(
-                    leading: const Icon(Icons.face_rounded, color: AppColors.parentPrimary),
-                    title: const Text('Ahmet Yılmaz', style: TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: const Text('8A Sınıfı • No: 456'),
-                    trailing: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.successLight,
-                        borderRadius: BorderRadius.circular(8),
+                _buildSettingsGroup(
+                  'Öğrenci / Çocuk Bağlantıları',
+                  [
+                    ...() {
+                      final studentsAsync = ref.watch(
+                        parentStudentsStreamProvider(user?.uid ?? ''),
+                      );
+                      final students =
+                          studentsAsync.asData?.value ?? const [];
+                      if (studentsAsync.isLoading) {
+                        return [
+                          const ListTile(
+                            title: Text('Öğrenciler yükleniyor...'),
+                            trailing: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                          const Divider(height: 1),
+                        ];
+                      }
+                      if (students.isEmpty) {
+                        return [
+                          const ListTile(
+                            leading: Icon(Icons.link_off_rounded,
+                                color: AppColors.textSecondary),
+                            title: Text('Bağlı öğrenci yok'),
+                            subtitle: Text(
+                                'Öğretmenden davet kodu alıp ekleyin'),
+                          ),
+                          const Divider(height: 1),
+                        ];
+                      }
+                      return [
+                        for (final s in students) ...[
+                          ListTile(
+                            leading: const Icon(Icons.face_rounded,
+                                color: AppColors.parentPrimary),
+                            title: Text(s.name,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold)),
+                            subtitle: Text(
+                              '${s.classId} Sınıfı${s.schoolNumber != null ? ' • No: ${s.schoolNumber}' : ''}',
+                            ),
+                            trailing: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppColors.successLight,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text(
+                                'Bağlı',
+                                style: TextStyle(
+                                  color: AppColors.success,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const Divider(height: 1),
+                        ],
+                      ];
+                    }(),
+                    ListTile(
+                      leading: const Icon(Icons.add_circle_outline_rounded,
+                          color: AppColors.parentPrimary),
+                      title: const Text(
+                        'Yeni Çocuk / Öğrenci Ekle',
+                        style: TextStyle(
+                          color: AppColors.parentPrimary,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                      child: const Text(
-                        'Bağlı',
-                        style: TextStyle(color: AppColors.success, fontSize: 12, fontWeight: FontWeight.bold),
-                      ),
+                      subtitle: const Text(
+                          'Öğretmenden alınan davet kodu ile ekle'),
+                      trailing: const Icon(Icons.chevron_right_rounded,
+                          color: AppColors.parentPrimary),
+                      onTap: _showAddChildDialog,
                     ),
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.add_circle_outline_rounded, color: AppColors.parentPrimary),
-                    title: const Text('Yeni Çocuk / Öğrenci Ekle', style: TextStyle(color: AppColors.parentPrimary, fontWeight: FontWeight.bold)),
-                    subtitle: const Text('Öğretmenden alınan davet kodu ile ekle'),
-                    trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.parentPrimary),
-                    onTap: _showAddChildDialog,
-                  ),
-                ]),
+                  ],
+                ),
                 const SizedBox(height: 20),
               ],
 
