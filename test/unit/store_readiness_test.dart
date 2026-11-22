@@ -172,7 +172,14 @@ void main() {
       expect(googlePlist, contains('com.eduly.mobile'));
       expect(googlePlist, contains('eduly-server'));
       expect(privacyManifest, contains('NSPrivacyCollectedDataTypeCrashData'));
-      expect(pbxproj, contains('TARGETED_DEVICE_FAMILY = "1"'));
+      expect(
+        pbxproj,
+        matches(RegExp(r'TARGETED_DEVICE_FAMILY\s*=\s*"?1"?\s*;')),
+      );
+      expect(
+        pbxproj,
+        isNot(matches(RegExp(r'TARGETED_DEVICE_FAMILY\s*=\s*"?1,2"?\s*;'))),
+      );
       expect(pbxproj, contains('com.eduly.mobile'));
       expect(
         pbxproj,
