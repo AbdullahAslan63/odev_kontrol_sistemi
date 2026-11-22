@@ -66,18 +66,35 @@ workflows:
           flutter test
       - name: Build signed IPA
         script: |
-          PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d'+' -f1 | tr -d '\r')
+          PUBSPEC_LINE=$(grep '^version:' pubspec.yaml | awk '{print $2}' | tr -d '\r')
+          PUBSPEC_VERSION=$(echo "$PUBSPEC_LINE" | cut -d'+' -f1)
+          PUBSPEC_BUILD=$(echo "$PUBSPEC_LINE" | cut -d'+' -f2)
           EFFECTIVE_BUILD_NAME="${PUBSPEC_VERSION:-$BUILD_NAME}"
+          if ! [[ "$PUBSPEC_BUILD" =~ ^[0-9]+$ ]]; then
+            PUBSPEC_BUILD=7
+          fi
           LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || true)
           if ! [[ "$LATEST_BUILD" =~ ^[0-9]+$ ]]; then
             LATEST_BUILD=6
           fi
           NEXT_BUILD=$((LATEST_BUILD + 1))
+          if [ "$NEXT_BUILD" -lt "$PUBSPEC_BUILD" ]; then
+            NEXT_BUILD="$PUBSPEC_BUILD"
+          fi
           echo "Building iOS $EFFECTIVE_BUILD_NAME ($NEXT_BUILD)..."
           flutter build ipa --release \
             --build-name="$EFFECTIVE_BUILD_NAME" \
             --build-number="$NEXT_BUILD" \
             --export-options-plist=/Users/builder/export_options.plist
+      - name: Upload iOS dSYMs to Crashlytics (non-blocking)
+        script: |
+          DSYM_PATH="build/ios/archive/Runner.xcarchive/dSYMs/Runner.app.dSYM"
+          UPLOAD_BIN="ios/Pods/FirebaseCrashlytics/upload-symbols"
+          if [ -x "$UPLOAD_BIN" ] && [ -d "$DSYM_PATH" ]; then
+            "$UPLOAD_BIN" -gsp ios/Runner/GoogleService-Info.plist -p ios "$DSYM_PATH" || true
+          else
+            echo "Crashlytics dSYM upload skipped (binary or dSYM not found)."
+          fi
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log

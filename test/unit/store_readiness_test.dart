@@ -149,5 +149,34 @@ void main() {
       expect(File('scripts/build_android_release.ps1').existsSync(), isTrue);
       expect(File('scripts/trigger_ios_release.ps1').existsSync(), isTrue);
     });
+
+    test('iOS sürüm, gizlilik ve Codemagic ayarları tutarlıdır', () {
+      final releaseXcconfig =
+          File('ios/Flutter/Release.xcconfig').readAsStringSync();
+      final infoPlist = File('ios/Runner/Info.plist').readAsStringSync();
+      final googlePlist =
+          File('ios/Runner/GoogleService-Info.plist').readAsStringSync();
+      final privacyManifest =
+          File('ios/Runner/PrivacyInfo.xcprivacy').readAsStringSync();
+      final pbxproj =
+          File('ios/Runner.xcodeproj/project.pbxproj').readAsStringSync();
+
+      expect(releaseXcconfig, contains('Pods-Runner.release.xcconfig'));
+      expect(releaseXcconfig, contains('Generated.xcconfig'));
+      expect(infoPlist, contains('<key>ITSAppUsesNonExemptEncryption</key>'));
+      expect(infoPlist, contains('<string>Eduly</string>'));
+      expect(infoPlist, isNot(contains('NSCameraUsageDescription')));
+      expect(infoPlist, isNot(contains('NSMicrophoneUsageDescription')));
+      expect(googlePlist, contains('com.eduly.mobile'));
+      expect(googlePlist, contains('eduly-server'));
+      expect(privacyManifest, contains('NSPrivacyCollectedDataTypeCrashData'));
+      expect(pbxproj, contains('TARGETED_DEVICE_FAMILY = "1"'));
+      expect(pbxproj, contains('com.eduly.mobile'));
+      expect(
+        pbxproj,
+        isNot(contains(
+            'ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = AppIcon;')),
+      );
+    });
   });
 }
