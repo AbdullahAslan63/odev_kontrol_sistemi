@@ -102,7 +102,7 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
 
     final phoneState = ref.read(phoneAuthNotifierProvider);
     if (success ||
-        phoneState.authState is PhoneAuthCodeSent ||
+        phoneState.hasVerificationSession ||
         phoneState.authState is PhoneAuthSignedIn) {
       setState(() => _currentStep = 2);
     } else if (phoneState.authState is PhoneAuthError) {
@@ -142,34 +142,45 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
     final phoneState = ref.read(phoneAuthNotifierProvider);
     if (phoneState.authState is! PhoneAuthSignedIn) {
       if (!_step2FormKey.currentState!.validate()) return;
-
-      final verified = await ref
-          .read(phoneAuthNotifierProvider.notifier)
-          .verifyCode(_otpController.text.trim());
-      if (!mounted) return;
-
-      if (!verified) {
-        final err = ref.read(phoneAuthNotifierProvider).authState;
-        if (err is PhoneAuthError) {
-          context.showSnackBar(err.userMessage, isError: true);
-        }
-        return;
-      }
     }
 
-    await ref.read(parentAuthProvider.notifier).registerParentWithPhoneAuth(
-          name: _nameController.text.trim(),
-          inviteCode: _validatedCode!,
-        );
+    ref.read(isCompletingParentRegistrationProvider.notifier).state = true;
+    try {
+      if (ref.read(phoneAuthNotifierProvider).authState is! PhoneAuthSignedIn) {
+        final verified = await ref
+            .read(phoneAuthNotifierProvider.notifier)
+            .verifyCode(_otpController.text.trim(), invalidateAuth: false);
+        if (!mounted) return;
 
-    if (!mounted) return;
-    final state = ref.read(parentAuthProvider);
-    if (state.isSuccess) {
-      context.showSnackBar('Veli kaydınız tamamlandı.');
-      context.go('/parent/home');
-    } else if (state.errorMessage != null) {
-      context.showSnackBar(state.errorMessage!, isError: true);
-      ref.read(parentAuthProvider.notifier).clearError();
+        if (!verified) {
+          final err = ref.read(phoneAuthNotifierProvider).authState;
+          if (err is PhoneAuthError) {
+            context.showSnackBar(err.userMessage, isError: true);
+          }
+          return;
+        }
+      }
+
+      await ref.read(parentAuthProvider.notifier).registerParentWithPhoneAuth(
+            name: _nameController.text.trim(),
+            inviteCode: _validatedCode!,
+          );
+
+      if (!mounted) return;
+      final state = ref.read(parentAuthProvider);
+      if (state.isSuccess) {
+        ref.invalidate(authStateProvider);
+        ref.read(isCompletingParentRegistrationProvider.notifier).state = false;
+        context.showSnackBar('Veli kaydınız tamamlandı.');
+        context.go('/parent/home');
+      } else if (state.errorMessage != null) {
+        context.showSnackBar(state.errorMessage!, isError: true);
+        ref.read(parentAuthProvider.notifier).clearError();
+      }
+    } finally {
+      if (mounted) {
+        ref.read(isCompletingParentRegistrationProvider.notifier).state = false;
+      }
     }
   }
 
@@ -434,8 +445,9 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
         phoneAuth is PhoneAuthVerifying ||
         phoneAuth is PhoneAuthSending;
 
-    final masked = phoneAuth is PhoneAuthCodeSent
-        ? phoneAuth.maskedPhone
+    final masked = (phoneUiState.maskedPhone != null &&
+            phoneUiState.maskedPhone!.isNotEmpty)
+        ? phoneUiState.maskedPhone!
         : PhoneNumberHelper.maskPhoneNumber(_phoneController.text.trim());
 
     return Form(
@@ -501,9 +513,23 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
               child: TextButton(
                 onPressed: (isBusy || !phoneUiState.canResend)
                     ? null
-                    : () => ref
-                        .read(phoneAuthNotifierProvider.notifier)
-                        .resendCode(),
+                    : () async {
+                        final sent = await ref
+                            .read(phoneAuthNotifierProvider.notifier)
+                            .resendCode();
+                        if (!mounted) return;
+                        final latest = ref.read(phoneAuthNotifierProvider);
+                        if (sent) {
+                          context.showSnackBar(
+                            'Doğrulama kodu tekrar gönderildi.',
+                          );
+                        } else if (latest.authState is PhoneAuthError) {
+                          context.showSnackBar(
+                            (latest.authState as PhoneAuthError).userMessage,
+                            isError: true,
+                          );
+                        }
+                      },
                 child: Text(
                   phoneUiState.canResend
                       ? 'Kodu Tekrar Gönder'

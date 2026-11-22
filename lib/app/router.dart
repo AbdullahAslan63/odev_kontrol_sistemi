@@ -51,6 +51,10 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshNotifier.notify();
   });
   ref.listen(activeSessionUserProvider, (_, __) => refreshNotifier.notify());
+  ref.listen(
+    isCompletingParentRegistrationProvider,
+    (_, __) => refreshNotifier.notify(),
+  );
   ref.onDispose(refreshNotifier.dispose);
 
   final router = GoRouter(
@@ -82,6 +86,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (!isLoggedIn && !isAuthPage) return '/welcome';
 
       if (isLoggedIn) {
+        if (location.startsWith('/register/parent') &&
+            ref.read(isCompletingParentRegistrationProvider)) {
+          return null;
+        }
         if (isAuthPage) {
           return user.isTeacher ? '/teacher/home' : '/parent/home';
         }

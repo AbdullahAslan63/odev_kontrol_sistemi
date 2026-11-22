@@ -109,7 +109,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return;
     }
 
-    if (phoneState.authState is! PhoneAuthCodeSent) {
+    if (!phoneState.hasVerificationSession) {
       await _sendParentSms();
       return;
     }
@@ -348,8 +348,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Widget _buildParentForm(PhoneAuthUiState phoneUiState, bool isLoading) {
     final phoneAuth = phoneUiState.authState;
-    final hasCodeSent = phoneAuth is PhoneAuthCodeSent;
+    final hasCodeSent = phoneUiState.hasVerificationSession;
     final isSignedIn = phoneAuth is PhoneAuthSignedIn;
+    final maskedPhone = (phoneUiState.maskedPhone != null &&
+            phoneUiState.maskedPhone!.isNotEmpty)
+        ? phoneUiState.maskedPhone!
+        : PhoneNumberHelper.maskPhoneNumber(_phoneController.text.trim());
 
     return Form(
       key: _parentFormKey,
@@ -405,7 +409,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'SMS doğrulama kodu ${phoneAuth.maskedPhone} numarasına gönderildi.',
+                      'SMS doğrulama kodu $maskedPhone numarasına gönderildi.',
                       style: AppTextStyles.bodySmall.copyWith(
                         color: AppColors.textPrimary,
                       ),
@@ -455,9 +459,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 TextButton(
                   onPressed: (isLoading || !phoneUiState.canResend)
                       ? null
-                      : () => ref
-                          .read(phoneAuthNotifierProvider.notifier)
-                          .resendCode(),
+                      : () async {
+                          final sent = await ref
+                              .read(phoneAuthNotifierProvider.notifier)
+                              .resendCode();
+                          if (!mounted) return;
+                          final latest = ref.read(phoneAuthNotifierProvider);
+                          if (sent) {
+                            context.showSnackBar(
+                              'Doğrulama kodu tekrar gönderildi.',
+                            );
+                          } else if (latest.authState is PhoneAuthError) {
+                            context.showSnackBar(
+                              (latest.authState as PhoneAuthError).userMessage,
+                              isError: true,
+                            );
+                          }
+                        },
                   child: Text(
                     phoneUiState.canResend
                         ? 'Kodu Tekrar Gönder'

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +11,7 @@ import 'package:odev_takip/core/utils/phone_number_helper.dart';
 import 'package:odev_takip/features/auth/data/repositories/auth_repository_impl.dart';
 import 'package:odev_takip/features/auth/domain/entities/app_user.dart';
 import 'package:odev_takip/features/auth/presentation/providers/auth_providers.dart';
+import 'package:odev_takip/features/auth/presentation/providers/phone_auth_provider.dart';
 import 'package:odev_takip/features/auth/presentation/screens/login_screen.dart';
 import 'package:odev_takip/features/auth/presentation/screens/parent_register_screen.dart';
 import 'package:odev_takip/features/classes/domain/entities/class_entity.dart';
@@ -181,6 +183,125 @@ void main() {
       expect(innerCanceled, isTrue);
       expect(emitted.length, 2);
       expect(emitted.last, isNull);
+    });
+
+    test(
+        'PhoneAuthNotifier user-disabled gibi doğrulama hatalarından sonra verificationId bilgisini korur ve yeniden denemede kaybetmez',
+        () async {
+      final fakeService = _FakePhoneAuthService()
+        ..nextVerifyError = FirebaseAuthException(
+          code: 'user-disabled',
+          message: 'The user account has been disabled.',
+        );
+
+      final container = ProviderContainer(
+        overrides: [
+          firebasePhoneAuthServiceProvider.overrideWithValue(fakeService),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final sub = container.listen(phoneAuthNotifierProvider, (_, __) {});
+      addTearDown(sub.close);
+
+      final notifier = container.read(phoneAuthNotifierProvider.notifier);
+      final sent = await notifier.sendCode('0531 563 5049');
+      expect(sent, isTrue);
+      expect(
+        container.read(phoneAuthNotifierProvider).hasVerificationSession,
+        isTrue,
+      );
+      expect(
+        container.read(phoneAuthNotifierProvider).verificationId,
+        'ver-123',
+      );
+
+      final firstAttempt = await notifier.verifyCode('123456');
+      expect(firstAttempt, isFalse);
+      final afterFirstError = container.read(phoneAuthNotifierProvider);
+      expect(afterFirstError.authState, isA<PhoneAuthError>());
+      expect(
+        (afterFirstError.authState as PhoneAuthError).errorCode,
+        'user-disabled',
+      );
+      expect(afterFirstError.hasVerificationSession, isTrue);
+      expect(afterFirstError.verificationId, 'ver-123');
+      expect(fakeService.verifyCallCount, 1);
+
+      // İkinci denemede "önce SMS doğrulama kodu isteyin" yerine aynı verificationId ile doğrulama denenmeli
+      fakeService.nextVerifyError = FirebaseAuthException(
+        code: 'invalid-verification-code',
+      );
+      final secondAttempt = await notifier.verifyCode('123456');
+      expect(secondAttempt, isFalse);
+      expect(fakeService.verifyCallCount, 2);
+      expect(fakeService.lastVerificationId, 'ver-123');
+      final afterSecondError = container.read(phoneAuthNotifierProvider);
+      expect(
+        (afterSecondError.authState as PhoneAuthError).errorCode,
+        'invalid-verification-code',
+      );
+      expect(afterSecondError.hasVerificationSession, isTrue);
+    });
+
+    test(
+        'PhoneAuthNotifier session-expired hatası aldığında doğrulama oturumunu sıfırlar',
+        () async {
+      final fakeService = _FakePhoneAuthService()
+        ..nextVerifyError = FirebaseAuthException(code: 'session-expired');
+
+      final container = ProviderContainer(
+        overrides: [
+          firebasePhoneAuthServiceProvider.overrideWithValue(fakeService),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final sub = container.listen(phoneAuthNotifierProvider, (_, __) {});
+      addTearDown(sub.close);
+
+      final notifier = container.read(phoneAuthNotifierProvider.notifier);
+      await notifier.sendCode('0531 563 5049');
+      expect(
+        container.read(phoneAuthNotifierProvider).hasVerificationSession,
+        isTrue,
+      );
+
+      final ok = await notifier.verifyCode('123456');
+      expect(ok, isFalse);
+      expect(
+        container.read(phoneAuthNotifierProvider).hasVerificationSession,
+        isFalse,
+      );
+      expect(container.read(phoneAuthNotifierProvider).verificationId, isNull);
+    });
+
+    test('FirebasePhoneAuthService.mapFirebaseError kritik kodları Türkçe eşler',
+        () {
+      expect(
+        FirebasePhoneAuthService.mapFirebaseError(
+          FirebaseAuthException(code: 'user-disabled'),
+        ),
+        contains('devre dışı bırakılmıştır'),
+      );
+      expect(
+        FirebasePhoneAuthService.mapFirebaseError(
+          FirebaseAuthException(code: 'web-context-cancelled'),
+        ),
+        contains('kapatıldı'),
+      );
+      expect(
+        FirebasePhoneAuthService.mapFirebaseError(
+          FirebaseAuthException(code: 'invalid-verification-code'),
+        ),
+        contains('hatalı'),
+      );
+      expect(
+        FirebasePhoneAuthService.mapFirebaseError(
+          FirebaseAuthException(code: 'session-expired'),
+        ),
+        contains('süresi dolmuş'),
+      );
     });
   });
 
@@ -497,4 +618,41 @@ void main() {
       );
     });
   });
+}
+
+class _FakePhoneAuthService extends FirebasePhoneAuthService {
+  int verifyCallCount = 0;
+  String? lastVerificationId;
+  String? lastSmsCode;
+  Object? nextVerifyError;
+
+  @override
+  Future<void> sendVerificationCode({
+    required String rawPhone,
+    int? forceResendingToken,
+    required void Function(PhoneAuthState state) onStateChanged,
+  }) async {
+    onStateChanged(const PhoneAuthSending());
+    onStateChanged(
+      PhoneAuthCodeSent(
+        verificationId: 'ver-123',
+        resendToken: 42,
+        maskedPhone: PhoneNumberHelper.maskPhoneNumber(rawPhone),
+      ),
+    );
+  }
+
+  @override
+  Future<UserCredential> verifyOtpCode({
+    required String verificationId,
+    required String smsCode,
+  }) async {
+    verifyCallCount++;
+    lastVerificationId = verificationId;
+    lastSmsCode = smsCode;
+    if (nextVerifyError != null) {
+      throw nextVerifyError!;
+    }
+    throw UnimplementedError();
+  }
 }

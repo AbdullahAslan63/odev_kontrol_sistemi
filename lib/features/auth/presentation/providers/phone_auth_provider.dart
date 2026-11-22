@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/utils/phone_number_helper.dart';
 import '../../data/services/firebase_phone_auth_service.dart';
@@ -12,24 +13,43 @@ class PhoneAuthUiState {
     this.cooldownSeconds = 0,
     this.canResend = false,
     this.currentPhone,
+    this.verificationId,
+    this.resendToken,
+    this.maskedPhone,
   });
 
   final PhoneAuthState authState;
   final int cooldownSeconds;
   final bool canResend;
   final String? currentPhone;
+  final String? verificationId;
+  final int? resendToken;
+  final String? maskedPhone;
+
+  bool get hasVerificationSession =>
+      verificationId != null && verificationId!.isNotEmpty;
 
   PhoneAuthUiState copyWith({
     PhoneAuthState? authState,
     int? cooldownSeconds,
     bool? canResend,
     String? currentPhone,
+    String? verificationId,
+    int? resendToken,
+    String? maskedPhone,
+    bool clearVerificationSession = false,
   }) {
     return PhoneAuthUiState(
       authState: authState ?? this.authState,
       cooldownSeconds: cooldownSeconds ?? this.cooldownSeconds,
       canResend: canResend ?? this.canResend,
       currentPhone: currentPhone ?? this.currentPhone,
+      verificationId:
+          clearVerificationSession ? null : (verificationId ?? this.verificationId),
+      resendToken:
+          clearVerificationSession ? null : (resendToken ?? this.resendToken),
+      maskedPhone:
+          clearVerificationSession ? null : (maskedPhone ?? this.maskedPhone),
     );
   }
 }
@@ -97,6 +117,7 @@ class PhoneAuthNotifier extends StateNotifier<PhoneAuthUiState> {
     state = state.copyWith(
       currentPhone: e164Phone,
       authState: const PhoneAuthSending(),
+      clearVerificationSession: true,
     );
 
     final completer = Completer<bool>();
@@ -105,7 +126,7 @@ class PhoneAuthNotifier extends StateNotifier<PhoneAuthUiState> {
       rawPhone: e164Phone,
       onStateChanged: (newAuthState) {
         if (!mounted) return;
-        state = state.copyWith(authState: newAuthState);
+        _applyServiceState(newAuthState);
         if (newAuthState is PhoneAuthCodeSent) {
           _startCooldownTimer();
           if (!completer.isCompleted) completer.complete(true);
@@ -140,33 +161,58 @@ class PhoneAuthNotifier extends StateNotifier<PhoneAuthUiState> {
   }
 
   /// Süre dolduğunda doğrulama kodunu tekrar gönderir
-  Future<void> resendCode() async {
-    if (!state.canResend || state.currentPhone == null) return;
-
-    final codeSentState = state.authState is PhoneAuthCodeSent
-        ? state.authState as PhoneAuthCodeSent
-        : null;
+  Future<bool> resendCode() async {
+    if (!state.canResend || state.currentPhone == null) return false;
 
     state = state.copyWith(authState: const PhoneAuthSending());
+    final completer = Completer<bool>();
 
     await _phoneAuthService.sendVerificationCode(
       rawPhone: state.currentPhone!,
-      forceResendingToken: codeSentState?.resendToken,
+      forceResendingToken: state.resendToken,
       onStateChanged: (newAuthState) {
         if (!mounted) return;
-        state = state.copyWith(authState: newAuthState);
+        _applyServiceState(newAuthState);
         if (newAuthState is PhoneAuthCodeSent) {
           _startCooldownTimer();
+          if (!completer.isCompleted) completer.complete(true);
         } else if (newAuthState is PhoneAuthSignedIn) {
           _handleSuccessfulAuth();
+          if (!completer.isCompleted) completer.complete(true);
+        } else if (newAuthState is PhoneAuthError) {
+          if (!completer.isCompleted) completer.complete(false);
         }
+      },
+    );
+
+    if (completer.isCompleted) {
+      return completer.future;
+    }
+    return completer.future.timeout(
+      const Duration(seconds: 35),
+      onTimeout: () {
+        if (mounted &&
+            (state.authState is PhoneAuthSending ||
+                state.authState is PhoneAuthVerifying)) {
+          state = state.copyWith(
+            authState: const PhoneAuthError(
+              userMessage:
+                  'SMS doğrulama yanıtı zaman aşımına uğradı. Lütfen bağlantınızı kontrol edip tekrar deneyin.',
+            ),
+          );
+        }
+        return false;
       },
     );
   }
 
   /// Kullanıcının girdiği 6 haneli OTP kodunu doğrular
-  Future<bool> verifyCode(String code) async {
-    if (state.authState is! PhoneAuthCodeSent) {
+  Future<bool> verifyCode(
+    String code, {
+    bool invalidateAuth = true,
+  }) async {
+    final verificationId = state.verificationId;
+    if (verificationId == null || verificationId.isEmpty) {
       state = state.copyWith(
         authState: const PhoneAuthError(
           userMessage: 'Lütfen önce SMS doğrulama kodu isteyin.',
@@ -174,7 +220,6 @@ class PhoneAuthNotifier extends StateNotifier<PhoneAuthUiState> {
       );
       return false;
     }
-    final codeSent = state.authState as PhoneAuthCodeSent;
 
     final cleanCode = code.trim();
     if (cleanCode.length != 6 || !RegExp(r'^\d{6}$').hasMatch(cleanCode)) {
@@ -190,7 +235,7 @@ class PhoneAuthNotifier extends StateNotifier<PhoneAuthUiState> {
 
     try {
       final credential = await _phoneAuthService.verifyOtpCode(
-        verificationId: codeSent.verificationId,
+        verificationId: verificationId,
         smsCode: cleanCode,
       );
 
@@ -199,8 +244,11 @@ class PhoneAuthNotifier extends StateNotifier<PhoneAuthUiState> {
         if (!mounted) return false;
         state = state.copyWith(
           authState: PhoneAuthSignedIn(user: credential.user!, idToken: token),
+          clearVerificationSession: true,
         );
-        _handleSuccessfulAuth();
+        if (invalidateAuth) {
+          _handleSuccessfulAuth();
+        }
         return true;
       }
       state = state.copyWith(
@@ -210,15 +258,42 @@ class PhoneAuthNotifier extends StateNotifier<PhoneAuthUiState> {
       );
       return false;
     } catch (e) {
-      final String message = e is FormatException
+      final errorCode = e is FirebaseAuthException ? e.code : null;
+      final isExpired = errorCode == 'session-expired' ||
+          errorCode == 'auth/session-expired' ||
+          errorCode == 'code-expired' ||
+          errorCode == 'auth/code-expired';
+      final message = e is FormatException
           ? e.message
           : FirebasePhoneAuthService.mapFirebaseError(e);
       if (mounted) {
         state = state.copyWith(
-          authState: PhoneAuthError(userMessage: message),
+          authState: PhoneAuthError(
+            userMessage: message,
+            errorCode: errorCode,
+          ),
+          clearVerificationSession: isExpired,
         );
       }
       return false;
+    }
+  }
+
+  void _applyServiceState(PhoneAuthState newAuthState) {
+    if (newAuthState is PhoneAuthCodeSent) {
+      state = state.copyWith(
+        authState: newAuthState,
+        verificationId: newAuthState.verificationId,
+        resendToken: newAuthState.resendToken,
+        maskedPhone: newAuthState.maskedPhone,
+      );
+    } else if (newAuthState is PhoneAuthSignedIn) {
+      state = state.copyWith(
+        authState: newAuthState,
+        clearVerificationSession: true,
+      );
+    } else {
+      state = state.copyWith(authState: newAuthState);
     }
   }
 

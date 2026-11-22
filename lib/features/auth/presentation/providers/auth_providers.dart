@@ -21,6 +21,10 @@ final authStateProvider = StreamProvider<AppUser?>((ref) {
 /// Giriş/kayıt tamamlandığında yönlendirme yarışını önlemek için senkron aktif kullanıcı.
 final activeSessionUserProvider = StateProvider<AppUser?>((ref) => null);
 
+/// Veli telefon doğrulaması ile kayıt Firestore yazımı bitene kadar router yönlendirmesini bekletir.
+final isCompletingParentRegistrationProvider =
+    StateProvider<bool>((ref) => false);
+
 /// Mevcut oturum açmış kullanıcı (senkron ve reaktif erişim için)
 final currentUserProvider = Provider<AppUser?>((ref) {
   return ref.watch(authStateProvider).valueOrNull ??

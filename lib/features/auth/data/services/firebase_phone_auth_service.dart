@@ -211,7 +211,16 @@ class FirebasePhoneAuthService {
           return 'İnternet bağlantınızı kontrol edip tekrar deneyin.';
         case 'user-disabled':
         case 'auth/user-disabled':
-          return 'Bu kullanıcı hesabı devre dışı bırakılmıştır.';
+          return 'Bu telefon numarasına bağlı hesap Firebase üzerinde devre dışı bırakılmıştır. Hesabın etkinleştirilmesi için yönetici ile iletişime geçin.';
+        case 'web-context-cancelled':
+        case 'auth/web-context-cancelled':
+          return 'Doğrulama penceresi kapatıldı. Lütfen tekrar deneyin.';
+        case 'invalid-app-credential':
+        case 'auth/invalid-app-credential':
+          return 'Uygulama doğrulaması başarısız oldu. Lütfen tekrar deneyin.';
+        case 'missing-verification-code':
+        case 'auth/missing-verification-code':
+          return 'Lütfen 6 haneli doğrulama kodunu girin.';
         default:
           return error.message ??
               'Telefon doğrulaması sırasında bir hata oluştu.';
