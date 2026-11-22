@@ -1,31 +1,28 @@
-EDULY — Mac'siz TestFlight (YAYIN YOK)
-=====================================
+EDULY — Mac'siz TestFlight & Yerel Windows Android Yayın Akışı
+=================================================================
 
-Hazır:
-- Kod: analyze 0 / test 27-27 (son kontrol CI'da tekrar)
-- iOS bundle: com.eduly.mobile (ASC ile aynı)
-- version: 1.0.1+3
-- codemagic.yaml + ios/ExportOptions.plist
-- ASC API Key: Eduly CI
-    Issuer ID : 9ea68bff-0cc0-4875-82b9-794881555f4c
-    Key ID    : 3D7L4VWB3L
-    Role      : App Manager
-- Privacy HTML: https://cdn.jsdelivr.net/gh/AbdullahAslan63/odev_kontrol_sistemi@main/docs/privacy.html
-- AAB (Android): build/app/outputs/bundle/release/app-release.aab
-  NOT: Play listing com.eduly.app ≠ AAB com.odevtakip.odev_takip
+Güncel Durum (v1.0.2):
+- Kod Kalitesi : `flutter analyze` 0 sorun, tüm testler geçiyor
+- iOS Bundle ID: `com.eduly.mobile` (Apple ID: 6813570990, iPhone-only)
+- Android App ID: `com.eduly.app` (Firebase hedefi: `eduly-server`)
+- Sürüm        : `1.0.2+7` (`pubspec.yaml` ile otomatik senkronize)
+- Privacy HTML : `https://cdn.jsdelivr.net/gh/AbdullahAslan63/odev_kontrol_sistemi@main/docs/privacy.html`
+- Terms HTML   : `https://cdn.jsdelivr.net/gh/AbdullahAslan63/odev_kontrol_sistemi@main/docs/terms.html`
+- Support HTML : `https://cdn.jsdelivr.net/gh/AbdullahAslan63/odev_kontrol_sistemi@main/docs/support.html`
 
-Senin sıradaki (Codemagic):
-1. ASC → Integrations → Eduly CI → Download .p8 (bir kez)
-2. codemagic.io → GitHub odev_kontrol_sistemi
-3. appstore_credentials group:
-   APP_STORE_CONNECT_ISSUER_ID
-   APP_STORE_CONNECT_KEY_IDENTIFIER
-   APP_STORE_CONNECT_PRIVATE_KEY
-   APPLE_TEAM_ID (developer.apple.com Membership)
-4. Code signing: ASC API / automatic
-5. Start build → TestFlight Update (telefonda)
-6. ASLA "Submit for Review" / Production publish yapma (şimdilik)
+1) iOS TestFlight (Codemagic Mac mini M2 — Tag Tetiklemeli):
+- `codemagic.yaml` içinde `ios-testflight` yalnızca `v*` Git etiketi atıldığında çalışır
+  (normal `main` push'larında 500 dk/ay M2 kotasını harcamaz).
+- TestFlight gönderimi aktiftir; App Store'a otomatik gönderim kapalıdır (`submit_to_app_store: false`).
+- Yeni TestFlight sürümü basmak için Windows PowerShell'den:
+  `powershell -ExecutionPolicy Bypass -File scripts/trigger_ios_release.ps1`
+- Panel: `https://codemagic.io/app/6b01c00f6d74f7039d18461a`
 
-Screenshots (ASC upload):
-  assets/images/screenshots/asc/iphone67_*.png
-  assets/images/eduly_app_icon_1024.png
+2) Android Play Store AAB (Doğrudan Bu Windows Bilgisayardan):
+- İlk kurulum: Firebase `eduly-server` projesinden `com.eduly.app` için gerçek
+  `google-services.json` dosyasını `android/app/google-services.json` üzerine kaydedin.
+- Keystore + imza ayarları + AAB üretimi için:
+  `powershell -ExecutionPolicy Bypass -File scripts/build_android_release.ps1 -InitKeystore`
+- Sonraki release derlemeleri için:
+  `powershell -ExecutionPolicy Bypass -File scripts/build_android_release.ps1`
+- Çıktı: `build/app/outputs/bundle/release/app-release.aab`

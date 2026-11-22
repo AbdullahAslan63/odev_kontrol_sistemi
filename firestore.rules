@@ -54,6 +54,9 @@ service cloud.firestore {
     }
 
     function isValidParentLinkUpdate(studentId) {
+      let existingParents = ('parentIds' in resource.data && resource.data.parentIds is list)
+        ? resource.data.parentIds
+        : [];
       return isAuthenticated() &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['parentIds', 'lastInviteCode']) &&
         request.resource.data.lastInviteCode is string &&
@@ -62,8 +65,9 @@ service cloud.firestore {
         get(/databases/$(database)/documents/invite_codes/$(request.resource.data.lastInviteCode)).data.used == false &&
         getAfter(/databases/$(database)/documents/invite_codes/$(request.resource.data.lastInviteCode)).data.used == true &&
         getAfter(/databases/$(database)/documents/invite_codes/$(request.resource.data.lastInviteCode)).data.usedBy == request.auth.uid &&
-        request.resource.data.parentIds.hasAll(resource.data.parentIds) &&
-        request.resource.data.parentIds.toSet().difference(resource.data.parentIds.toSet()) == [request.auth.uid].toSet();
+        request.resource.data.parentIds is list &&
+        request.resource.data.parentIds.hasAll(existingParents) &&
+        request.resource.data.parentIds.toSet().difference(existingParents.toSet()) == [request.auth.uid].toSet();
     }
 
     function isParentSelfUnlink() {

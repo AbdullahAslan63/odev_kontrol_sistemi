@@ -18,6 +18,13 @@ workflows:
     name: Eduly iOS → TestFlight
     max_build_duration: 60
     instance_type: mac_mini_m2
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+      cancel_previous_builds: true
     environment:
       flutter: stable
       xcode: latest
@@ -52,21 +59,23 @@ workflows:
           flutter config --no-enable-swift-package-manager
           flutter pub get
           cd ios
-          pod install --repo-update
+          pod install || pod install --repo-update
       - name: Analyze & test
         script: |
           flutter analyze
           flutter test
       - name: Build signed IPA
         script: |
+          PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d'+' -f1 | tr -d '\r')
+          EFFECTIVE_BUILD_NAME="${PUBSPEC_VERSION:-$BUILD_NAME}"
           LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || true)
           if ! [[ "$LATEST_BUILD" =~ ^[0-9]+$ ]]; then
             LATEST_BUILD=6
           fi
           NEXT_BUILD=$((LATEST_BUILD + 1))
-          echo "Building iOS $BUILD_NAME ($NEXT_BUILD)..."
+          echo "Building iOS $EFFECTIVE_BUILD_NAME ($NEXT_BUILD)..."
           flutter build ipa --release \
-            --build-name="$BUILD_NAME" \
+            --build-name="$EFFECTIVE_BUILD_NAME" \
             --build-number="$NEXT_BUILD" \
             --export-options-plist=/Users/builder/export_options.plist
     artifacts:
@@ -78,6 +87,7 @@ workflows:
         key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
         issuer_id: $APP_STORE_CONNECT_ISSUER_ID
         submit_to_testflight: true
+        submit_to_app_store: false
 
   android-playstore:
     name: Eduly Android → AAB (Linux)
@@ -115,9 +125,11 @@ workflows:
           flutter test
       - name: Build signed App Bundle (AAB)
         script: |
+          PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d'+' -f1 | tr -d '\r')
+          EFFECTIVE_BUILD_NAME="${PUBSPEC_VERSION:-$BUILD_NAME}"
           BUILD_NO="${PROJECT_BUILD_NUMBER:-7}"
           flutter build appbundle --release \
-            --build-name="$BUILD_NAME" \
+            --build-name="$EFFECTIVE_BUILD_NAME" \
             --build-number="$BUILD_NO"
     artifacts:
       - build/app/outputs/bundle/release/*.aab

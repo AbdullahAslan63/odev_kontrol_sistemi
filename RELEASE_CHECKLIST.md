@@ -35,21 +35,32 @@ Kod tabanı temizlendikten sonra yalnızca konsollardan yapılabilecek 4 adım:
      - **Age Rating:** 4+
      - **App Privacy:** Name, Email Address, User ID (Linked), Crash Data (Not Linked) — `ios/Runner/PrivacyInfo.xcprivacy` ile birebir uyumlu.
      - **Privacy Policy URL:** `https://cdn.jsdelivr.net/gh/AbdullahAslan63/odev_kontrol_sistemi@main/docs/privacy.html`
-     - **Support URL / Terms:** `https://cdn.jsdelivr.net/gh/AbdullahAslan63/odev_kontrol_sistemi@main/docs/terms.html`
+     - **Support URL:** `https://cdn.jsdelivr.net/gh/AbdullahAslan63/odev_kontrol_sistemi@main/docs/support.html`
+     - **Terms URL:** `https://cdn.jsdelivr.net/gh/AbdullahAslan63/odev_kontrol_sistemi@main/docs/terms.html`
      - **App Review Information:** İnceleme ekibinin test edebilmesi için geçerli bir **Öğretmen** hesabı, bir **Veli** hesabı ve gerekirse kullanılmamış bir **Davet Kodu** notu ekleyin.
 
 ---
 
-## 📦 Derleme Komutları
+## 📦 Derleme ve Otomatik Yayın Komutları
 
-### Android App Bundle (`.aab`)
-```bash
-flutter build appbundle --release
+### Yerel Windows Android App Bundle (`.aab`)
+İlk kurulumda (`google-services.json` yerleştirildikten sonra):
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build_android_release.ps1 -InitKeystore
+```
+Sonraki derlemeler ve ön kontrol:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build_android_release.ps1 -PreflightOnly
+powershell -ExecutionPolicy Bypass -File scripts/build_android_release.ps1
 ```
 Çıktı: `build/app/outputs/bundle/release/app-release.aab`
 
-### iOS TestFlight (`codemagic.yaml` — Mac mini M2)
-- `codemagic.yaml` içinde `ios-testflight` akışı CocoaPods/Pub cache ve dinamik build numarası ile çalışır (aylık 500 dk M2 kotasını korur).
+### iOS TestFlight (`codemagic.yaml` — Mac mini M2, `v*` Tag Tetiklemeli)
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/trigger_ios_release.ps1
+```
+- `codemagic.yaml` içinde `ios-testflight` akışı yalnızca `v*` etiketi push edildiğinde çalışır (normal `main` push'larında aylık 500 dk M2 kotasını harcamaz).
+- CocoaPods/Pub cache ve `pubspec.yaml` üzerinden dinamik sürüm senkronizasyonu aktiftir.
 - Linux üzerinde `android-playstore` akışı ise M2 kotasından hiç harcamadan imzalı `.aab` üretir.
 
 ---

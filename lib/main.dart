@@ -40,14 +40,18 @@ Future<void> main() async {
       );
     } else {
       await Firebase.initializeApp();
-      await FirebaseCrashlytics.instance
-          .setCrashlyticsCollectionEnabled(!kDebugMode);
-      FlutterError.onError =
-          FirebaseCrashlytics.instance.recordFlutterFatalError;
-      PlatformDispatcher.instance.onError = (error, stack) {
-        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-        return true;
-      };
+      try {
+        await FirebaseCrashlytics.instance
+            .setCrashlyticsCollectionEnabled(!kDebugMode);
+        FlutterError.onError =
+            FirebaseCrashlytics.instance.recordFlutterFatalError;
+        PlatformDispatcher.instance.onError = (error, stack) {
+          FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+          return true;
+        };
+      } catch (e) {
+        debugPrint('Crashlytics initialize warning: $e');
+      }
     }
   } catch (e) {
     debugPrint('Firebase initialize warning: $e');

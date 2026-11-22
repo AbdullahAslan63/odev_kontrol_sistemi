@@ -453,7 +453,9 @@ class AuthRepositoryImpl implements AuthRepository {
         {
           'uid': parentUid,
           'studentIds': FieldValue.arrayUnion([studentId]),
-          if (classId.isNotEmpty) 'classIds': FieldValue.arrayUnion([classId]),
+          'classIds': FieldValue.arrayUnion(
+            classId.isNotEmpty ? [classId] : const <String>[],
+          ),
           'lastLinkedStudentId': studentId,
         },
         SetOptions(merge: true),

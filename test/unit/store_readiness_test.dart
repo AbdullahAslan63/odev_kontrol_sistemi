@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -108,6 +109,45 @@ void main() {
       expect(find.textContaining('123456'), findsNothing);
       expect(find.textContaining('0531'), findsNothing);
       expect(find.textContaining('Test Modu'), findsNothing);
+    });
+  });
+
+  group('Release Hygiene & Config Tests', () {
+    test('legacy MatPusula görselleri silinmiş ve Eduly ikonu mevcut olmalıdır',
+        () {
+      expect(File('assets/images/eduly_app_icon_1024.png').existsSync(), isTrue);
+      expect(File('assets/images/matpusula_app_showcase.png').existsSync(),
+          isFalse);
+      expect(File('assets/images/matpusula_logo.png').existsSync(), isFalse);
+      expect(File('assets/images/matpusula_real_screenshots.png').existsSync(),
+          isFalse);
+    });
+
+    test('codemagic.yaml tag tetikleme ve güvenli TestFlight ayarlarını içerir',
+        () {
+      final yaml = File('codemagic.yaml').readAsStringSync();
+      expect(yaml, contains('tag_patterns:'));
+      expect(yaml, contains('submit_to_testflight: true'));
+      expect(yaml, contains('submit_to_app_store: false'));
+      expect(yaml, contains('pod install || pod install --repo-update'));
+    });
+
+    test('Android Gradle dosyaları com.eduly.app ve Crashlytics içerir', () {
+      final appGradle =
+          File('android/app/build.gradle.kts').readAsStringSync();
+      final settingsGradle =
+          File('android/settings.gradle.kts').readAsStringSync();
+      expect(appGradle, contains('com.eduly.app'));
+      expect(appGradle, contains('com.google.firebase.crashlytics'));
+      expect(settingsGradle, contains('com.google.firebase.crashlytics'));
+    });
+
+    test('firestore.rules ve Windows yayın scriptleri mevcuttur', () {
+      final rules = File('firestore.rules').readAsStringSync();
+      expect(rules, contains('existingParents'));
+      expect(rules, contains('lastInviteCode'));
+      expect(File('scripts/build_android_release.ps1').existsSync(), isTrue);
+      expect(File('scripts/trigger_ios_release.ps1').existsSync(), isTrue);
     });
   });
 }

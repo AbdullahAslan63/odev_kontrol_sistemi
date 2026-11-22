@@ -129,7 +129,7 @@ class MessagesRepository {
           .toList();
       list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return list;
-    });
+    }).handleError((_) => <MessageEntity>[]);
   }
 
   /// Velinin aldığı tüm öğretmen mesajları akışı
@@ -145,6 +145,6 @@ class MessagesRepository {
           .toList();
       list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return list;
-    });
+    }).handleError((_) => <MessageEntity>[]);
   }
 }
