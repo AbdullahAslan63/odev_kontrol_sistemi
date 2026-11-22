@@ -126,6 +126,8 @@ void main() {
     test('codemagic.yaml tag tetikleme ve güvenli TestFlight ayarlarını içerir',
         () {
       final yaml = File('codemagic.yaml').readAsStringSync();
+      expect(yaml, contains('branch_patterns:'));
+      expect(yaml, contains('eduly-testflight'));
       expect(yaml, contains('tag_patterns:'));
       expect(yaml, contains('submit_to_testflight: true'));
       expect(yaml, contains('submit_to_app_store: false'));

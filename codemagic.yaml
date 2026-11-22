@@ -20,7 +20,12 @@ workflows:
     instance_type: mac_mini_m2
     triggering:
       events:
+        - push
         - tag
+      branch_patterns:
+        - pattern: 'eduly-testflight'
+          include: true
+          source: true
       tag_patterns:
         - pattern: 'v*'
           include: true

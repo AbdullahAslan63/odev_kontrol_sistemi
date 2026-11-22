@@ -1,9 +1,10 @@
 <#
 .SYNOPSIS
-    Eduly iOS TestFlight derlemesini Codemagic uzerinde Git tag (v*) ile tetikler.
+    Eduly iOS TestFlight derlemesini Codemagic uzerinde eduly-testflight dali veya opsiyonel Git tag (v*) ile tetikler.
 .DESCRIPTION
     Windows PowerShell 5.1 uyumludur. main dalinda temiz calisma agacini kontrol eder,
-    testleri calistirir, origin/main ve v* etiketini push eder.
+    testleri calistirir, varsayilan olarak origin/main ve origin+fork eduly-testflight dallarini senkronize eder.
+    Opsiyonel -Tag parametresi verilirse belirtilen v* etiketini olusturup gonderir.
 #>
 [CmdletBinding()]
 param(
@@ -14,6 +15,7 @@ param(
 
 $ErrorActionPreference = 'Continue'
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$CodemagicUrl = 'https://codemagic.io/builds?app_id=6b01c00f6d74f7039d18461a'
 
 function Write-Section {
     param([string]$Title)
@@ -46,7 +48,14 @@ try {
         exit 1
     }
 
-    Write-Section '2. Surum ve Etiket Belirleme'
+    $remotes = @(& git remote)
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[HATA] Git uzak depolari okunamadi." -ForegroundColor Red
+        exit 1
+    }
+    $hasFork = ($remotes -contains 'fork')
+
+    Write-Section '2. Surum ve Tetikleme Modu Kontrolu'
     $pubspecPath = Join-Path $RepoRoot 'pubspec.yaml'
     $versionLine = Get-Content -LiteralPath $pubspecPath -Encoding UTF8 | Where-Object { $_ -match '^version:\s*' } | Select-Object -First 1
     if (-not $versionLine) {
@@ -56,32 +65,48 @@ try {
 
     $rawVersion = ($versionLine -replace '^version:\s*', '').Trim()
     $semVer = ($rawVersion -split '\+')[0].Trim()
-    if ([string]::IsNullOrWhiteSpace($Tag)) {
-        $Tag = "v$semVer"
-    }
-
-    if ($Tag -notmatch '^v') {
-        Write-Host "[HATA] Etiket 'v' ile baslamalidir (ornek: v$semVer). Verilen: '$Tag'" -ForegroundColor Red
-        exit 1
-    }
+    $useTagMode = -not [string]::IsNullOrWhiteSpace($Tag)
 
     Write-Host "Pubspec surumu : $rawVersion"
-    Write-Host "Hedef etiket   : $Tag"
+    Write-Host "Fork deposu    : $(if ($hasFork) { 'var (fork/eduly-testflight senkronize edilecek)' } else { 'yok (yalnizca origin)' })"
 
-    $localTagMatch = & git tag --list $Tag
-    if ($localTagMatch) {
-        Write-Host "[HATA] '$Tag' etiketi yerelde zaten mevcut. Tekrar TestFlight almak icin -Tag ${Tag}-tf2 seklinde deneyin." -ForegroundColor Red
-        exit 1
-    }
+    if ($useTagMode) {
+        $Tag = $Tag.Trim()
+        if ($Tag -notmatch '^v') {
+            Write-Host "[HATA] Etiket 'v' ile baslamalidir (ornek: v$semVer-tf2). Verilen: '$Tag'" -ForegroundColor Red
+            exit 1
+        }
+        Write-Host "Tetikleme modu : Git Tag ($Tag)"
 
-    $remoteTagMatch = & git ls-remote --tags origin "refs/tags/$Tag"
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "[HATA] origin uzak deposundaki etiketler sorgulanamadi." -ForegroundColor Red
-        exit $LASTEXITCODE
-    }
-    if ($remoteTagMatch) {
-        Write-Host "[HATA] '$Tag' etiketi origin uzerinde zaten mevcut. Tekrar TestFlight almak icin -Tag ${Tag}-tf2 seklinde deneyin." -ForegroundColor Red
-        exit 1
+        $localTagMatch = & git tag --list $Tag
+        if ($localTagMatch) {
+            Write-Host "[HATA] '$Tag' etiketi yerelde zaten mevcut. Ornek yeni etiket: -Tag v${semVer}-tf2" -ForegroundColor Red
+            exit 1
+        }
+
+        $originTagMatch = & git ls-remote --tags origin "refs/tags/$Tag"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[HATA] origin uzak deposundaki etiketler sorgulanamadi." -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
+        if ($originTagMatch) {
+            Write-Host "[HATA] '$Tag' etiketi origin uzerinde zaten mevcut. Ornek yeni etiket: -Tag v${semVer}-tf2" -ForegroundColor Red
+            exit 1
+        }
+
+        if ($hasFork) {
+            $forkTagMatch = & git ls-remote --tags fork "refs/tags/$Tag"
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "[HATA] fork uzak deposundaki etiketler sorgulanamadi." -ForegroundColor Red
+                exit $LASTEXITCODE
+            }
+            if ($forkTagMatch) {
+                Write-Host "[HATA] '$Tag' etiketi fork uzerinde zaten mevcut. Ornek yeni etiket: -Tag v${semVer}-tf2" -ForegroundColor Red
+                exit 1
+            }
+        }
+    } else {
+        Write-Host "Tetikleme modu : Dal Push (origin/eduly-testflight$(if ($hasFork) { ' + fork/eduly-testflight' }))"
     }
 
     if (-not $SkipTests) {
@@ -105,34 +130,73 @@ try {
         Write-Section 'Dry Run Ozeti (-DryRun)'
         Write-Host "[DRY RUN] Asagidaki islemler uygulanacakti (hicbir push/tag yapilmadi):" -ForegroundColor Yellow
         Write-Host "  1. git push origin main"
-        Write-Host "  2. git tag -a $Tag -m `"Eduly $Tag TestFlight release`""
-        Write-Host "  3. git push origin $Tag"
-        Write-Host "  4. Codemagic: https://codemagic.io/app/6b01c00f6d74f7039d18461a"
+        if ($useTagMode) {
+            Write-Host "  2. git tag -a $Tag -m `"Eduly $Tag TestFlight release`""
+            Write-Host "  3. git push origin $Tag"
+            if ($hasFork) {
+                Write-Host "  4. git push fork $Tag"
+            }
+        } else {
+            Write-Host "  2. git push origin main:eduly-testflight"
+            if ($hasFork) {
+                Write-Host "  3. git push fork main:eduly-testflight"
+            }
+        }
+        Write-Host "  Codemagic: $CodemagicUrl"
         exit 0
     }
 
-    Write-Section '4. origin/main ve Tag Push'
+    Write-Section '4. Uzak Depo Gonderimi'
     & git push origin main
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[HATA] git push origin main basarisiz (exit $LASTEXITCODE)." -ForegroundColor Red
         exit $LASTEXITCODE
     }
 
-    & git tag -a $Tag -m "Eduly $Tag TestFlight release"
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "[HATA] git tag olusturulamadi (exit $LASTEXITCODE)." -ForegroundColor Red
-        exit $LASTEXITCODE
-    }
+    if ($useTagMode) {
+        & git tag -a $Tag -m "Eduly $Tag TestFlight release"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[HATA] git tag olusturulamadi (exit $LASTEXITCODE)." -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
 
-    & git push origin $Tag
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "[HATA] git push origin $Tag basarisiz (exit $LASTEXITCODE)." -ForegroundColor Red
-        exit $LASTEXITCODE
+        & git push origin $Tag
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[HATA] git push origin $Tag basarisiz (exit $LASTEXITCODE)." -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
+
+        if ($hasFork) {
+            & git push fork $Tag
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "[HATA] git push fork $Tag basarisiz (exit $LASTEXITCODE)." -ForegroundColor Red
+                exit $LASTEXITCODE
+            }
+        }
+    } else {
+        & git push origin main:eduly-testflight
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[HATA] git push origin main:eduly-testflight basarisiz (exit $LASTEXITCODE)." -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
+
+        if ($hasFork) {
+            & git push fork main:eduly-testflight
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "[HATA] git push fork main:eduly-testflight basarisiz (exit $LASTEXITCODE)." -ForegroundColor Red
+                exit $LASTEXITCODE
+            }
+        }
     }
 
     Write-Section 'Codemagic Tetiklendi'
-    Write-Host "[OK] '$Tag' etiketi gonderildi. Codemagic iOS -> TestFlight derlemesini buradan izleyebilirsiniz:" -ForegroundColor Green
-    Write-Host "https://codemagic.io/app/6b01c00f6d74f7039d18461a" -ForegroundColor Cyan
+    if ($useTagMode) {
+        Write-Host "[OK] '$Tag' etiketi gonderildi." -ForegroundColor Green
+    } else {
+        Write-Host "[OK] eduly-testflight dali guncellendi." -ForegroundColor Green
+    }
+    Write-Host "Codemagic iOS -> TestFlight derlemesini buradan izleyebilirsiniz:" -ForegroundColor Cyan
+    Write-Host $CodemagicUrl -ForegroundColor Cyan
     exit 0
 } finally {
     Pop-Location
