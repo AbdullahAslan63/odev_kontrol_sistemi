@@ -51,7 +51,7 @@ class _TeacherNewMessageScreenState
     try {
       final repo = ref.read(messagesRepositoryProvider);
 
-      await repo.sendMessage(
+      final parentCount = await repo.sendMessage(
         teacherId: currentUser.uid,
         teacherName: currentUser.name,
         classId: _selectedClassId,
@@ -62,11 +62,22 @@ class _TeacherNewMessageScreenState
 
       if (!mounted) return;
 
-      context.showSnackBar('Duyuru başarıyla velilere gönderildi! 📲');
+      if (parentCount == 0) {
+        context.showSnackBar(
+          'Duyuru kaydedildi ancak seçili hedefte henüz bağlı veli bulunmuyor.',
+        );
+      } else {
+        context.showSnackBar(
+          'Duyuru $parentCount veliye başarıyla gönderildi!',
+        );
+      }
       context.pop();
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
-      context.showSnackBar('Mesaj gönderilemedi: ${e.toString()}', isError: true);
+      context.showSnackBar(
+        'Mesaj gönderilemedi. Bağlantınızı kontrol edip tekrar deneyin.',
+        isError: true,
+      );
     } finally {
       if (mounted) {
         setState(() => _isSending = false);

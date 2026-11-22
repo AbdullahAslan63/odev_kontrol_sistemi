@@ -1,43 +1,48 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:odev_takip/features/auth/presentation/providers/auth_providers.dart';
-import 'package:odev_takip/core/theme/app_colors.dart';
-import 'package:odev_takip/core/theme/app_text_styles.dart';
-import 'package:odev_takip/core/theme/app_sizes.dart';
-import 'package:odev_takip/core/widgets/app_widgets.dart';
-import 'package:odev_takip/core/widgets/matpusula_logo.dart';
-
-import '../../../../core/widgets/notification_permission_dialog.dart';
+import '../../../../core/extensions/extensions.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_sizes.dart';
+import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/app_widgets.dart';
+import '../../../../core/widgets/eduly_logo.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
+import '../../../classes/presentation/providers/class_providers.dart';
+import '../../../homeworks/domain/entities/homework_entity.dart';
+import '../../../homeworks/presentation/providers/homework_providers.dart';
+import '../../../messages/presentation/providers/messages_providers.dart';
 
 /// Öğretmen ana panel ekranı.
-/// Özet kartlar, hızlı işlemler ve son aktivite listesi.
-class TeacherHomeScreen extends ConsumerStatefulWidget {
+/// Canlı özet kartlar, hızlı işlemler ve son ödevler listesi.
+class TeacherHomeScreen extends ConsumerWidget {
   const TeacherHomeScreen({super.key});
 
   @override
-  ConsumerState<TeacherHomeScreen> createState() => _TeacherHomeScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider);
+    final homeworksAsync = ref.watch(teacherHomeworksStreamProvider);
+    final classesAsync = ref.watch(teacherClassesStreamProvider);
+    final messagesAsync = ref.watch(teacherMessagesStreamProvider);
 
-class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      NotificationPermissionDialog.showIfFirstTime(context);
-    });
-  }
+    final homeworks = homeworksAsync.valueOrNull ?? const <HomeworkEntity>[];
+    final classes = classesAsync.valueOrNull ?? const [];
+    final messages = messagesAsync.valueOrNull ?? const [];
 
-  @override
-  Widget build(BuildContext context) {
-    final authState = ref.watch(authStateProvider);
-    final user = authState.valueOrNull;
+    final activeHomeworkCount = homeworks.where((h) => !h.isOverdue).length;
+    final upcomingCount = homeworks
+        .where((h) => !h.isOverdue && h.dueDate.daysUntil() <= 3)
+        .length;
+    final overdueCount = homeworks.where((h) => h.isOverdue).length;
+
+    final firstName = (user?.name.trim().isNotEmpty ?? false)
+        ? user!.name.trim().split(' ').first
+        : 'Öğretmenim';
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: CustomScrollView(
         slivers: [
-          // ── SliverAppBar ───────────────────────────────────────────────
           SliverAppBar(
             expandedHeight: 140,
             floating: false,
@@ -59,7 +64,7 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                   children: [
                     Row(
                       children: [
-                        const MatPusulaLogo(size: 28),
+                        const EdulyLogo(size: 28),
                         const SizedBox(width: 8),
                         Text(
                           'Eduly',
@@ -73,13 +78,14 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Merhaba, ${user?.name.split(' ').first ?? 'Öğretmenim'} 👋',
+                      'Merhaba, $firstName 👋',
                       style: AppTextStyles.h3.copyWith(color: Colors.white),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       _getTodayGreeting(),
-                      style: AppTextStyles.bodySmall.copyWith(color: Colors.white70),
+                      style:
+                          AppTextStyles.bodySmall.copyWith(color: Colors.white70),
                     ),
                   ],
                 ),
@@ -87,65 +93,80 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
             ),
             actions: [
               IconButton(
-                icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+                icon: const Icon(
+                  Icons.notifications_outlined,
+                  color: Colors.white,
+                ),
                 onPressed: () => context.push('/teacher/notifications'),
               ),
               const SizedBox(width: 4),
             ],
           ),
-
           SliverPadding(
             padding: const EdgeInsets.all(AppSizes.pagePadding),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                // ── Özet kartlar ───────────────────────────────────────────
-                const _SectionTitle('Bu Hafta'),
+                // ── Canlı Özet Kartları ──────────────────────────────────────
+                _SectionTitle(
+                  'Genel Durum',
+                  onAllTap: () => context.go('/teacher/homeworks'),
+                ),
                 const SizedBox(height: 12),
-                const Row(
+                Row(
                   children: [
                     Expanded(
                       child: _SummaryCard(
                         label: 'Aktif Ödev',
-                        value: '—',
+                        value: homeworksAsync.isLoading
+                            ? '—'
+                            : '$activeHomeworkCount',
                         icon: Icons.assignment_outlined,
                         color: AppColors.teacherPrimary,
+                        onTap: () => context.go('/teacher/homeworks'),
                       ),
                     ),
-                    SizedBox(width: 12),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: _SummaryCard(
-                        label: 'Yaklaşan',
-                        value: '—',
+                        label: 'Yaklaşan (3 Gün)',
+                        value:
+                            homeworksAsync.isLoading ? '—' : '$upcomingCount',
                         icon: Icons.schedule_rounded,
                         color: AppColors.warning,
+                        onTap: () => context.go('/teacher/homeworks'),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
-                const Row(
+                Row(
                   children: [
                     Expanded(
                       child: _SummaryCard(
-                        label: 'Yapılmadı',
-                        value: '—',
+                        label: 'Süresi Geçen',
+                        value:
+                            homeworksAsync.isLoading ? '—' : '$overdueCount',
                         icon: Icons.cancel_outlined,
                         color: AppColors.error,
+                        onTap: () => context.go('/teacher/homeworks'),
                       ),
                     ),
-                    SizedBox(width: 12),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: _SummaryCard(
-                        label: 'Mesaj',
-                        value: '—',
+                        label: 'Duyuru',
+                        value: messagesAsync.isLoading
+                            ? '—'
+                            : '${messages.length}',
                         icon: Icons.message_outlined,
                         color: AppColors.parentPrimary,
+                        onTap: () => context.push('/teacher/messages'),
                       ),
                     ),
                   ],
                 ),
 
-                // ── Hızlı işlemler ─────────────────────────────────────────
+                // ── Hızlı İşlemler ───────────────────────────────────────────
                 const SizedBox(height: 28),
                 const _SectionTitle('Hızlı İşlemler'),
                 const SizedBox(height: 12),
@@ -167,13 +188,19 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                       icon: Icons.person_add_rounded,
                       label: 'Öğrenci Ekle',
                       color: AppColors.parentPrimary,
-                      onTap: () => context.push('/teacher/students/new'),
+                      onTap: () {
+                        if (classes.length == 1) {
+                          context.push('/teacher/classes/${classes.first.id}');
+                        } else {
+                          context.go('/teacher/classes');
+                        }
+                      },
                     ),
                     _QuickActionTile(
                       icon: Icons.edit_note_rounded,
                       label: 'Deneme Gir',
                       color: AppColors.accent,
-                      onTap: () => context.push('/teacher/exams/new'),
+                      onTap: () => context.push('/teacher/exams/create'),
                     ),
                     _QuickActionTile(
                       icon: Icons.campaign_rounded,
@@ -184,29 +211,52 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                   ],
                 ),
 
-                // ── Son ödevler ────────────────────────────────────────────
+                // ── Son Ödevler ──────────────────────────────────────────────
                 const SizedBox(height: 28),
-                const _SectionTitle('Son Ödevler'),
-                const SizedBox(height: 12),
-                EmptyState(
-                  title: 'Henüz ödev eklenmedi',
-                  subtitle: 'Yeni ödev eklemek için "Yeni Ödev" butonunu kullanın.',
-                  icon: Icons.assignment_rounded,
-                  action: () => context.push('/teacher/homeworks/new'),
-                  actionLabel: 'Yeni Ödev',
+                _SectionTitle(
+                  'Son Ödevler',
+                  onAllTap: () => context.go('/teacher/homeworks'),
                 ),
+                const SizedBox(height: 12),
+                if (homeworksAsync.isLoading)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: CircularProgressIndicator(),
+                    ),
+                  )
+                else if (homeworks.isEmpty)
+                  EmptyState(
+                    title: 'Henüz ödev eklenmedi',
+                    subtitle:
+                        'Yeni ödev eklemek için "Yeni Ödev" butonunu kullanın.',
+                    icon: Icons.assignment_rounded,
+                    action: () => context.push('/teacher/homeworks/new'),
+                    actionLabel: 'Yeni Ödev',
+                  )
+                else
+                  ...homeworks.take(3).map(
+                        (hw) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _RecentHomeworkTile(
+                            homework: hw,
+                            onTap: () =>
+                                context.push('/teacher/homeworks/${hw.id}'),
+                          ),
+                        ),
+                      ),
 
-                const SizedBox(height: 32),
-
-                // ── Çıkış ──────────────────────────────────────────────────
+                const SizedBox(height: 24),
                 Center(
                   child: TextButton.icon(
                     onPressed: () async {
                       await ref.read(teacherAuthProvider.notifier).signOut();
                       if (context.mounted) context.go('/welcome');
                     },
-                    icon: const Icon(Icons.logout_rounded,
-                        color: AppColors.textSecondary),
+                    icon: const Icon(
+                      Icons.logout_rounded,
+                      color: AppColors.textSecondary,
+                    ),
                     label: Text(
                       'Çıkış Yap',
                       style: AppTextStyles.bodySmall
@@ -231,10 +281,10 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
   }
 }
 
-/// Bölüm başlığı
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.title);
+  const _SectionTitle(this.title, {this.onAllTap});
   final String title;
+  final VoidCallback? onAllTap;
 
   @override
   Widget build(BuildContext context) {
@@ -242,69 +292,74 @@ class _SectionTitle extends StatelessWidget {
       children: [
         Text(title, style: AppTextStyles.h4),
         const Spacer(),
-        TextButton(
-          onPressed: () {},
-          style: TextButton.styleFrom(
-            padding: EdgeInsets.zero,
-            minimumSize: const Size(0, 32),
-          ),
-          child: Text(
-            'Tümü',
-            style: AppTextStyles.labelMedium.copyWith(
-              color: AppColors.teacherPrimary,
+        if (onAllTap != null)
+          TextButton(
+            onPressed: onAllTap,
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(0, 32),
+            ),
+            child: Text(
+              'Tümü',
+              style: AppTextStyles.labelMedium.copyWith(
+                color: AppColors.teacherPrimary,
+              ),
             ),
           ),
-        ),
       ],
     );
   }
 }
 
-/// Özet kart
 class _SummaryCard extends StatelessWidget {
   const _SummaryCard({
     required this.label,
     required this.value,
     required this.icon,
     required this.color,
+    this.onTap,
   });
 
   final String label;
   final String value;
   final IconData icon;
   final Color color;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppSizes.cardRadius),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: 20),
-              const Spacer(),
-              Text(
-                value,
-                style: AppTextStyles.h3.copyWith(color: color),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(label, style: AppTextStyles.labelMedium),
-        ],
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppSizes.cardRadius),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppSizes.cardRadius),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: color, size: 20),
+                const Spacer(),
+                Text(
+                  value,
+                  style: AppTextStyles.h3.copyWith(color: color),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(label, style: AppTextStyles.labelMedium),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// Hızlı işlem kutusu
 class _QuickActionTile extends StatelessWidget {
   const _QuickActionTile({
     required this.icon,
@@ -345,6 +400,75 @@ class _QuickActionTile extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RecentHomeworkTile extends StatelessWidget {
+  const _RecentHomeworkTile({
+    required this.homework,
+    required this.onTap,
+  });
+
+  final HomeworkEntity homework;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppSizes.cardRadius),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppSizes.cardRadius),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.teacherPrimary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                homework.subject,
+                style: AppTextStyles.labelSmall.copyWith(
+                  color: AppColors.teacherPrimary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    homework.title,
+                    style: AppTextStyles.labelLarge,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    'Son Teslim: ${homework.dueDate.toTurkishDate()}',
+                    style: AppTextStyles.caption.copyWith(
+                      color: homework.isOverdue
+                          ? AppColors.error
+                          : AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.textDisabled,
+            ),
+          ],
         ),
       ),
     );

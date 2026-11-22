@@ -6,6 +6,7 @@ class StudentEntity {
   const StudentEntity({
     required this.id,
     required this.classId,
+    this.className,
     required this.teacherId,
     required this.name,
     this.schoolNumber,
@@ -18,6 +19,7 @@ class StudentEntity {
 
   final String id;
   final String classId;
+  final String? className;
   final String teacherId;
   final String name;
   final String? schoolNumber;
@@ -32,6 +34,7 @@ class StudentEntity {
   StudentEntity copyWith({
     String? id,
     String? classId,
+    String? className,
     String? teacherId,
     String? name,
     String? schoolNumber,
@@ -44,6 +47,7 @@ class StudentEntity {
     return StudentEntity(
       id: id ?? this.id,
       classId: classId ?? this.classId,
+      className: className ?? this.className,
       teacherId: teacherId ?? this.teacherId,
       name: name ?? this.name,
       schoolNumber: schoolNumber ?? this.schoolNumber,

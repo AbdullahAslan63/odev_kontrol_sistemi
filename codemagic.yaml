@@ -1,16 +1,22 @@
-# Eduly — Mac'siz iOS TestFlight (Codemagic). App Store Submit YOK.
+# Eduly — Mac'siz iOS TestFlight (Codemagic M2) + Android Play Store CI
 #
-# Secrets group `appstore_credentials`:
+# iOS Secrets group `appstore_credentials`:
 #   APP_STORE_CONNECT_ISSUER_ID
 #   APP_STORE_CONNECT_KEY_IDENTIFIER
 #   APP_STORE_CONNECT_PRIVATE_KEY
 #   APPLE_TEAM_ID
-#   CERTIFICATE_PRIVATE_KEY   (RSA PEM — Distribution cert oluşturmak için)
+#   CERTIFICATE_PRIVATE_KEY
+#
+# Android Secrets group `google_play_credentials` (opsiyonel, imzalı AAB için):
+#   CM_KEYSTORE            (base64 kodlu upload-keystore.jks)
+#   CM_KEYSTORE_PASSWORD
+#   CM_KEY_PASSWORD
+#   CM_KEY_ALIAS
 
 workflows:
   ios-testflight:
     name: Eduly iOS → TestFlight
-    max_build_duration: 120
+    max_build_duration: 60
     instance_type: mac_mini_m2
     environment:
       flutter: stable
@@ -21,6 +27,11 @@ workflows:
       vars:
         BUNDLE_ID: com.eduly.mobile
         APP_STORE_APPLE_ID: "6813570990"
+        BUILD_NAME: "1.0.2"
+    cache:
+      cache_paths:
+        - $HOME/.pub-cache
+        - $HOME/Library/Caches/CocoaPods
     scripts:
       - name: Set up keychain
         script: |
@@ -36,27 +47,27 @@ workflows:
       - name: Set up code signing on Xcode project
         script: |
           xcode-project use-profiles
-      - name: Flutter pub get
+      - name: Flutter dependencies & CocoaPods
         script: |
           flutter config --no-enable-swift-package-manager
           flutter pub get
-      - name: Install CocoaPods dependencies
-        script: |
           cd ios
-          rm -f Podfile.lock
           pod install --repo-update
-      - name: Analyze + test
+      - name: Analyze & test
         script: |
           flutter analyze
           flutter test
       - name: Build signed IPA
         script: |
-          BUILD_NO="${PROJECT_BUILD_NUMBER:-$BUILD_NUMBER}"
-          flutter config --no-enable-swift-package-manager
-          cd ios && pod install && cd ..
+          LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || true)
+          if ! [[ "$LATEST_BUILD" =~ ^[0-9]+$ ]]; then
+            LATEST_BUILD=6
+          fi
+          NEXT_BUILD=$((LATEST_BUILD + 1))
+          echo "Building iOS $BUILD_NAME ($NEXT_BUILD)..."
           flutter build ipa --release \
-            --build-name=1.0.1 \
-            --build-number=6 \
+            --build-name="$BUILD_NAME" \
+            --build-number="$NEXT_BUILD" \
             --export-options-plist=/Users/builder/export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa
@@ -67,4 +78,46 @@ workflows:
         key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
         issuer_id: $APP_STORE_CONNECT_ISSUER_ID
         submit_to_testflight: true
-        # submit_to_app_store: false — yayınlama yok
+
+  android-playstore:
+    name: Eduly Android → AAB (Linux)
+    max_build_duration: 45
+    instance_type: linux_x2
+    environment:
+      flutter: stable
+      java: 17
+      groups:
+        - google_play_credentials
+      vars:
+        BUILD_NAME: "1.0.2"
+    cache:
+      cache_paths:
+        - $HOME/.pub-cache
+        - $HOME/.gradle/caches
+    scripts:
+      - name: Decode Android keystore
+        script: |
+          if [ -z "${CM_KEYSTORE:-}" ]; then
+            echo "CM_KEYSTORE bulunamadı. google_play_credentials grubunu yapılandırın."
+            exit 1
+          fi
+          echo "$CM_KEYSTORE" | base64 --decode > android/upload-keystore.jks
+          cat <<EOF > android/key.properties
+          storePassword=$CM_KEYSTORE_PASSWORD
+          keyPassword=$CM_KEY_PASSWORD
+          keyAlias=$CM_KEY_ALIAS
+          storeFile=../upload-keystore.jks
+          EOF
+      - name: Flutter pub get, analyze & test
+        script: |
+          flutter pub get
+          flutter analyze
+          flutter test
+      - name: Build signed App Bundle (AAB)
+        script: |
+          BUILD_NO="${PROJECT_BUILD_NUMBER:-7}"
+          flutter build appbundle --release \
+            --build-name="$BUILD_NAME" \
+            --build-number="$BUILD_NO"
+    artifacts:
+      - build/app/outputs/bundle/release/*.aab

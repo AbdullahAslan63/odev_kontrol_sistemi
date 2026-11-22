@@ -57,10 +57,16 @@ postgres_data/
 # ── Çakışan Klasörler ──────────────────────────────────────────
 odev_kontrol_sistemi/
 
-# Apple / CI secrets
+# Apple / CI secrets & Release artifacts
 *.p8
 AuthKey_*.p8
 *.pem
+*.apk
+*.aab
+*.jks
+*.keystore
+android/key.properties
+android/upload-keystore.jks
 secrets/
 codemagic.yaml.local
 API_KEY/

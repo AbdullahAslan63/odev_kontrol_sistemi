@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../auth/presentation/providers/auth_providers.dart';
+import '../../../../core/extensions/extensions.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_sizes.dart';
+import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_buttons.dart';
 import '../../../../core/widgets/app_text_field.dart';
-import '../../../../core/extensions/extensions.dart';
+import '../../../../core/widgets/app_widgets.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../classes/presentation/providers/class_providers.dart';
 import '../../../students/presentation/providers/student_providers.dart';
 import '../providers/homework_providers.dart';
@@ -69,11 +70,16 @@ class _CreateHomeworkScreenState extends ConsumerState<CreateHomeworkScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.school_outlined,
-                        size: 64, color: AppColors.textSecondary),
+                    const Icon(
+                      Icons.school_outlined,
+                      size: 64,
+                      color: AppColors.textSecondary,
+                    ),
                     const SizedBox(height: 16),
-                    Text('Önce Bir Sınıf Oluşturmalısınız',
-                        style: AppTextStyles.h3),
+                    Text(
+                      'Önce Bir Sınıf Oluşturmalısınız',
+                      style: AppTextStyles.h3,
+                    ),
                     const SizedBox(height: 8),
                     const Text(
                       'Ödev verebilmek için sistemde en az bir sınıfınızın bulunması gerekir.',
@@ -91,8 +97,11 @@ class _CreateHomeworkScreenState extends ConsumerState<CreateHomeworkScreen> {
             );
           }
 
-          // Varsayılan sınıf seçimi
-          _selectedClassId ??= classes.first.id;
+          final activeClassId = (_selectedClassId != null &&
+                  classes.any((c) => c.id == _selectedClassId))
+              ? _selectedClassId!
+              : classes.first.id;
+          _selectedClassId = activeClassId;
 
           return Form(
             key: _formKey,
@@ -101,9 +110,8 @@ class _CreateHomeworkScreenState extends ConsumerState<CreateHomeworkScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── Sınıf Seçimi ──────────────────────────────────────────
                   DropdownButtonFormField<String>(
-                    initialValue: _selectedClassId,
+                    initialValue: activeClassId,
                     decoration: InputDecoration(
                       labelText: 'Sınıf Seçin',
                       prefixIcon: const Icon(Icons.group_rounded),
@@ -113,19 +121,18 @@ class _CreateHomeworkScreenState extends ConsumerState<CreateHomeworkScreen> {
                       ),
                     ),
                     items: classes
-                        .map((c) => DropdownMenuItem(
-                              value: c.id,
-                              child: Text('${c.name} (${c.studentCount} Öğrenci)'),
-                            ))
+                        .map(
+                          (c) => DropdownMenuItem(
+                            value: c.id,
+                            child: Text('${c.name} (${c.studentCount} Öğrenci)'),
+                          ),
+                        )
                         .toList(),
                     onChanged: (val) {
                       if (val != null) setState(() => _selectedClassId = val);
                     },
                   ),
-
                   const SizedBox(height: 16),
-
-                  // ── Ders Seçimi ───────────────────────────────────────────
                   DropdownButtonFormField<String>(
                     initialValue: _selectedSubject,
                     decoration: InputDecoration(
@@ -137,19 +144,15 @@ class _CreateHomeworkScreenState extends ConsumerState<CreateHomeworkScreen> {
                       ),
                     ),
                     items: _subjects
-                        .map((s) => DropdownMenuItem(
-                              value: s,
-                              child: Text(s),
-                            ))
+                        .map(
+                          (s) => DropdownMenuItem(value: s, child: Text(s)),
+                        )
                         .toList(),
                     onChanged: (val) {
                       if (val != null) setState(() => _selectedSubject = val);
                     },
                   ),
-
                   const SizedBox(height: 16),
-
-                  // ── Ödev Başlığı ──────────────────────────────────────────
                   AppTextField(
                     controller: _titleController,
                     label: 'Ödev Başlığı',
@@ -162,10 +165,7 @@ class _CreateHomeworkScreenState extends ConsumerState<CreateHomeworkScreen> {
                       return null;
                     },
                   ),
-
                   const SizedBox(height: 16),
-
-                  // ── Kaynak & Soru Aralığı ──────────────────────────────────
                   Row(
                     children: [
                       Expanded(
@@ -187,10 +187,7 @@ class _CreateHomeworkScreenState extends ConsumerState<CreateHomeworkScreen> {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 16),
-
-                  // ── Teslim Tarihi Seçici ──────────────────────────────────
                   Text('Son Teslim Tarihi', style: AppTextStyles.inputLabel),
                   const SizedBox(height: 6),
                   InkWell(
@@ -202,19 +199,23 @@ class _CreateHomeworkScreenState extends ConsumerState<CreateHomeworkScreen> {
                         lastDate: DateTime.now().add(const Duration(days: 90)),
                       );
                       if (picked != null) {
-                        setState(() => _dueDate = DateTime(
-                              picked.year,
-                              picked.month,
-                              picked.day,
-                              23,
-                              59,
-                            ));
+                        setState(
+                          () => _dueDate = DateTime(
+                            picked.year,
+                            picked.month,
+                            picked.day,
+                            23,
+                            59,
+                          ),
+                        );
                       }
                     },
                     borderRadius: BorderRadius.circular(AppSizes.inputRadius),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 14),
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.surface,
                         borderRadius:
@@ -223,24 +224,25 @@ class _CreateHomeworkScreenState extends ConsumerState<CreateHomeworkScreen> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.calendar_today_rounded,
-                              color: AppColors.teacherPrimary),
+                          const Icon(
+                            Icons.calendar_today_rounded,
+                            color: AppColors.teacherPrimary,
+                          ),
                           const SizedBox(width: 12),
                           Text(
                             _dueDate.toTurkishDate(),
                             style: AppTextStyles.bodyMedium,
                           ),
                           const Spacer(),
-                          const Icon(Icons.arrow_drop_down_rounded,
-                              color: AppColors.textSecondary),
+                          const Icon(
+                            Icons.arrow_drop_down_rounded,
+                            color: AppColors.textSecondary,
+                          ),
                         ],
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 16),
-
-                  // ── Açıklama ──────────────────────────────────────────────
                   AppTextField(
                     controller: _descriptionController,
                     label: 'Ödev Açıklaması (İsteğe Bağlı)',
@@ -248,65 +250,60 @@ class _CreateHomeworkScreenState extends ConsumerState<CreateHomeworkScreen> {
                     prefixIcon: Icons.notes_rounded,
                     maxLines: 3,
                   ),
-
                   const SizedBox(height: 24),
-
-                  // ── Gönder Butonu ─────────────────────────────────────────
                   PrimaryButton(
                     label: 'Ödevi Sınıfa Ata',
                     isLoading: homeworkState.isLoading,
                     icon: Icons.send_rounded,
                     onPressed: () async {
-                      if (_formKey.currentState!.validate() &&
-                          _selectedClassId != null) {
-                        // Sınıftaki tüm öğrencileri çek
-                        final students = await ref.read(
-                            classStudentsStreamProvider(
-                              (classId: _selectedClassId!, teacherId: user?.uid ?? ''),
-                            ).future);
-                        final studentIds = students.map((s) => s.id).toList();
+                      if (!_formKey.currentState!.validate()) return;
+                      final students = await ref.read(
+                        classStudentsStreamProvider(
+                          (classId: activeClassId, teacherId: user?.uid ?? ''),
+                        ).future,
+                      );
+                      final studentIds = students.map((s) => s.id).toList();
 
-                        if (studentIds.isEmpty) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                    'Bu sınıfta henüz öğrenci yok! Ödev atayabilmek için önce öğrenci ekleyin.'),
-                                backgroundColor: AppColors.warning,
-                              ),
-                            );
-                          }
-                          return;
-                        }
-
-                        final success = await ref
-                            .read(homeworkNotifierProvider.notifier)
-                            .createHomework(
-                              teacherId: user?.uid ?? '',
-                              classId: _selectedClassId!,
-                              title: _titleController.text.trim(),
-                              subject: _selectedSubject,
-                              sourceName: _sourceController.text.trim().isEmpty
-                                  ? null
-                                  : _sourceController.text.trim(),
-                              questionRange: _rangeController.text.trim().isEmpty
-                                  ? null
-                                  : _rangeController.text.trim(),
-                              description:
-                                  _descriptionController.text.trim().isEmpty
-                                      ? null
-                                      : _descriptionController.text.trim(),
-                              dueDate: _dueDate,
-                              studentIds: studentIds,
-                            );
-
-                        if (context.mounted && success) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Ödev başarıyla oluşturuldu!')),
+                      if (studentIds.isEmpty) {
+                        if (context.mounted) {
+                          context.showSnackBar(
+                            'Bu sınıfta henüz öğrenci yok! Ödev atayabilmek için önce öğrenci ekleyin.',
+                            isError: true,
                           );
-                          context.pop();
                         }
+                        return;
+                      }
+
+                      final success = await ref
+                          .read(homeworkNotifierProvider.notifier)
+                          .createHomework(
+                            teacherId: user?.uid ?? '',
+                            classId: activeClassId,
+                            title: _titleController.text.trim(),
+                            subject: _selectedSubject,
+                            sourceName: _sourceController.text.trim().isEmpty
+                                ? null
+                                : _sourceController.text.trim(),
+                            questionRange: _rangeController.text.trim().isEmpty
+                                ? null
+                                : _rangeController.text.trim(),
+                            description:
+                                _descriptionController.text.trim().isEmpty
+                                    ? null
+                                    : _descriptionController.text.trim(),
+                            dueDate: _dueDate,
+                            studentIds: studentIds,
+                          );
+
+                      if (!context.mounted) return;
+                      if (success) {
+                        context.showSnackBar('Ödev başarıyla oluşturuldu!');
+                        context.pop();
+                      } else {
+                        context.showSnackBar(
+                          'Ödev oluşturulamadı. Lütfen tekrar deneyin.',
+                          isError: true,
+                        );
                       }
                     },
                   ),
@@ -316,7 +313,10 @@ class _CreateHomeworkScreenState extends ConsumerState<CreateHomeworkScreen> {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, __) => Center(child: Text('Sınıflar yüklenemedi: $err')),
+        error: (_, __) => ErrorState(
+          message: 'Sınıflar yüklenirken bir sorun oluştu.',
+          onRetry: () => ref.invalidate(teacherClassesStreamProvider),
+        ),
       ),
     );
   }

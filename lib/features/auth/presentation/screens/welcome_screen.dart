@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_sizes.dart';
 import '../../../../core/widgets/app_buttons.dart';
-import '../../../../core/widgets/matpusula_logo.dart';
+import '../../../../core/widgets/eduly_logo.dart';
 
 /// Hoş geldiniz ekranı.
-/// Uygulama açıldığında gösterilir; giriş veya kayıt seçenekleri sunar.
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
 
@@ -46,92 +46,105 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              AppColors.teacherPrimary,
-              Color(0xFF1A4FA0),
-            ],
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                AppColors.teacherPrimary,
+                Color(0xFF1A4FA0),
+              ],
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSizes.pagePadding * 1.5),
-            child: FadeTransition(
-              opacity: _fadeAnim,
-              child: SlideTransition(
-                position: _slideAnim,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 40),
-
-                    // ── Logo & Başlık ─────────────────────────────────────
-                    const MatPusulaLogo(size: 84),
-                    const SizedBox(height: 24),
-
-                    Text(
-                      'Eduly',
-                      style: AppTextStyles.h1.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+          child: SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.all(AppSizes.pagePadding * 1.5),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight:
+                          constraints.maxHeight - (AppSizes.pagePadding * 3),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Ödev & Eğitim Takip Sistemi',
-                      style: AppTextStyles.h4.copyWith(color: Colors.white70),
+                    child: IntrinsicHeight(
+                      child: FadeTransition(
+                        opacity: _fadeAnim,
+                        child: SlideTransition(
+                          position: _slideAnim,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 28),
+                              const EdulyLogo(size: 84),
+                              const SizedBox(height: 24),
+                              Text(
+                                'Eduly',
+                                style: AppTextStyles.h1.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Ödev & Eğitim Takip Sistemi',
+                                style: AppTextStyles.h4
+                                    .copyWith(color: Colors.white70),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Öğretmenler için merkezi sınıf yönetimi,\nveliler için şeffaf çocuk takibi.',
+                                style: AppTextStyles.bodyLarge
+                                    .copyWith(color: Colors.white70),
+                              ),
+                              const SizedBox(height: 36),
+                              const _FeatureItem(
+                                icon: Icons.assignment_rounded,
+                                text: 'Ödev takibi ve durum güncellemesi',
+                              ),
+                              const SizedBox(height: 16),
+                              const _FeatureItem(
+                                icon: Icons.bar_chart_rounded,
+                                text: 'Deneme sonuçları ve grafikler',
+                              ),
+                              const SizedBox(height: 16),
+                              const _FeatureItem(
+                                icon: Icons.track_changes_rounded,
+                                text: 'Konu analizi ve hedef takibi',
+                              ),
+                              const SizedBox(height: 16),
+                              const _FeatureItem(
+                                icon: Icons.notifications_rounded,
+                                text: 'Anlık bildirimler ve mesajlaşma',
+                              ),
+                              const Spacer(),
+                              const SizedBox(height: 28),
+                              PrimaryButton(
+                                label: 'Başlayalım',
+                                onPressed: () =>
+                                    context.push('/role-selection'),
+                                backgroundColor: Colors.white,
+                                foregroundColor: AppColors.teacherPrimary,
+                                icon: Icons.arrow_forward_rounded,
+                              ),
+                              const SizedBox(height: 12),
+                              SecondaryButton(
+                                label: 'Giriş Yap',
+                                onPressed: () => context.push('/login'),
+                                color: Colors.white,
+                              ),
+                              const SizedBox(height: 16),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Öğretmenler için merkezi sınıf yönetimi,\nveliler için şeffaf çocuk takibi.',
-                      style:
-                          AppTextStyles.bodyLarge.copyWith(color: Colors.white70),
-                    ),
-
-                    // ── Özellik listesi ───────────────────────────────────
-                    const SizedBox(height: 40),
-                    const _FeatureItem(
-                      icon: Icons.assignment_rounded,
-                      text: 'Ödev takibi ve durum güncellemesi',
-                    ),
-                    const SizedBox(height: 16),
-                    const _FeatureItem(
-                      icon: Icons.bar_chart_rounded,
-                      text: 'Deneme sonuçları ve grafikler',
-                    ),
-                    const SizedBox(height: 16),
-                    const _FeatureItem(
-                      icon: Icons.track_changes_rounded,
-                      text: 'Konu analizi ve hedef takibi',
-                    ),
-                    const SizedBox(height: 16),
-                    const _FeatureItem(
-                      icon: Icons.notifications_rounded,
-                      text: 'Anlık bildirimler ve mesajlaşma',
-                    ),
-
-                    const Spacer(),
-
-                    // ── Butonlar ──────────────────────────────────────────
-                    PrimaryButton(
-                      label: 'Başlayalım',
-                      onPressed: () => context.push('/role-selection'),
-                      backgroundColor: Colors.white,
-                      foregroundColor: AppColors.teacherPrimary,
-                      icon: Icons.arrow_forward_rounded,
-                    ),
-                    const SizedBox(height: 12),
-                    SecondaryButton(
-                      label: 'Giriş Yap',
-                      onPressed: () => context.push('/login'),
-                      color: Colors.white,
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
             ),
           ),
         ),

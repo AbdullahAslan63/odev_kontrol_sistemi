@@ -19,12 +19,23 @@ class ClassesRepositoryImpl implements ClassesRepository {
         .where('teacherId', isEqualTo: teacherId)
         .snapshots()
         .map((snapshot) {
-      final list = snapshot.docs
-          .map((doc) => ClassModel.fromFirestore(doc))
-          .toList();
+      final list =
+          snapshot.docs.map((doc) => ClassModel.fromFirestore(doc)).toList();
       list.sort((a, b) => a.name.compareTo(b.name));
       return list;
     }).handleError((_) => <ClassEntity>[]);
+  }
+
+  @override
+  Future<ClassEntity?> getClassById(String classId) async {
+    if (classId.isEmpty) return null;
+    try {
+      final doc = await _classesRef.doc(classId).get();
+      if (!doc.exists) return null;
+      return ClassModel.fromFirestore(doc);
+    } catch (_) {
+      return null;
+    }
   }
 
   @override

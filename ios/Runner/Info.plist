@@ -28,19 +28,6 @@
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
-	<key>NSCameraUsageDescription</key>
-	<string>Eduly, ödev veya profil için fotoğraf çekmek üzere kameraya erişir.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Eduly, ödev veya profil için galeriden fotoğraf seçmek üzere fotoğraf kitaplığına erişir.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Eduly, kaydedilen görselleri fotoğraf kitaplığına eklemek için erişim ister.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Eduly, video kaydı sırasında mikrofona erişebilir.</string>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>fetch</string>
-		<string>remote-notification</string>
-	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -71,15 +58,6 @@
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
-	<key>UISupportedInterfaceOrientations~ipad</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationPortraitUpsideDown</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 </dict>
 </plist>

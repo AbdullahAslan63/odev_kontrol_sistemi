@@ -9,17 +9,22 @@ final studentsRepositoryProvider = Provider<StudentsRepository>((ref) {
   return StudentsRepositoryImpl();
 });
 
+/// Velinin çoklu çocuk arasında seçtiği aktif öğrenci ID'si
+final selectedParentStudentIdProvider = StateProvider<String?>((ref) => null);
+
 /// Sınıfa göre öğrencilerin canlı akışı
 /// Family parametresi: (classId, teacherId) record
-final classStudentsStreamProvider =
-    StreamProvider.family<List<StudentEntity>, ({String classId, String teacherId})>((ref, params) {
+final classStudentsStreamProvider = StreamProvider.family<List<StudentEntity>,
+    ({String classId, String teacherId})>((ref, params) {
   final teacherId = params.teacherId.isNotEmpty
       ? params.teacherId
       : (FirebaseAuth.instance.currentUser?.uid ?? '');
-  if (teacherId.isEmpty) {
+  if (teacherId.isEmpty || params.classId.isEmpty) {
     return Stream.value(const <StudentEntity>[]);
   }
-  return ref.watch(studentsRepositoryProvider).getClassStudents(params.classId, teacherId: teacherId);
+  return ref
+      .watch(studentsRepositoryProvider)
+      .getClassStudents(params.classId, teacherId: teacherId);
 });
 
 /// Tek öğrenci akışı
@@ -36,9 +41,15 @@ final parentStudentsStreamProvider =
 });
 
 /// Öğrencinin aktif davet kodu getirme provider'ı
-final activeInviteCodeProvider =
-    FutureProvider.family<InviteCodeModel?, String>((ref, studentId) {
-  return ref.watch(studentsRepositoryProvider).getActiveInviteCode(studentId);
+final activeInviteCodeProvider = FutureProvider.family<InviteCodeModel?,
+    ({String studentId, String teacherId})>((ref, params) {
+  final teacherId = params.teacherId.isNotEmpty
+      ? params.teacherId
+      : (FirebaseAuth.instance.currentUser?.uid ?? '');
+  if (params.studentId.isEmpty || teacherId.isEmpty) return Future.value(null);
+  return ref
+      .watch(studentsRepositoryProvider)
+      .getActiveInviteCode(params.studentId, teacherId: teacherId);
 });
 
 /// Öğrenci ekleme/silme ve Davet Kodu Üretme Notifier'ı
@@ -49,6 +60,7 @@ class StudentNotifier extends StateNotifier<AsyncValue<void>> {
 
   Future<bool> addStudent({
     required String classId,
+    String? className,
     required String teacherId,
     required String name,
     String? schoolNumber,
@@ -61,6 +73,7 @@ class StudentNotifier extends StateNotifier<AsyncValue<void>> {
       final student = StudentEntity(
         id: '',
         classId: classId,
+        className: className,
         teacherId: teacherId,
         name: name,
         schoolNumber: schoolNumber,
@@ -93,12 +106,18 @@ class StudentNotifier extends StateNotifier<AsyncValue<void>> {
   Future<InviteCodeModel?> generateInviteCode({
     required String studentId,
     required String teacherId,
+    String? studentName,
+    String? classId,
+    String? className,
   }) async {
     state = const AsyncValue.loading();
     try {
       final inviteCode = await _repo.generateInviteCode(
         studentId: studentId,
         teacherId: teacherId,
+        studentName: studentName,
+        classId: classId,
+        className: className,
       );
       state = const AsyncValue.data(null);
       return inviteCode;

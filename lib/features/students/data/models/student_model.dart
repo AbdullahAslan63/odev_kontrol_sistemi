@@ -6,6 +6,7 @@ class StudentModel extends StudentEntity {
   const StudentModel({
     required super.id,
     required super.classId,
+    super.className,
     required super.teacherId,
     required super.name,
     super.schoolNumber,
@@ -22,6 +23,7 @@ class StudentModel extends StudentEntity {
     return StudentModel(
       id: doc.id,
       classId: data['classId'] as String? ?? '',
+      className: data['className'] as String?,
       teacherId: data['teacherId'] as String? ?? '',
       name: data['name'] as String? ?? '',
       schoolNumber: data['schoolNumber'] as String?,
@@ -36,6 +38,7 @@ class StudentModel extends StudentEntity {
   Map<String, dynamic> toFirestore() {
     return {
       'classId': classId,
+      if (className != null) 'className': className,
       'teacherId': teacherId,
       'name': name,
       'schoolNumber': schoolNumber,

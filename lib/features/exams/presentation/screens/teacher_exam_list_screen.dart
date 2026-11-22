@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/theme/app_sizes.dart';
-import '../../../../core/widgets/app_widgets.dart';
 import '../../../../core/extensions/extensions.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_sizes.dart';
+import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/app_widgets.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../classes/presentation/providers/class_providers.dart';
 import '../../../students/presentation/providers/student_providers.dart';
-import '../providers/exam_providers.dart';
 import '../../domain/entities/exam_result_entity.dart';
+import '../providers/exam_providers.dart';
 
 class TeacherExamListScreen extends ConsumerStatefulWidget {
   const TeacherExamListScreen({super.key});
@@ -35,11 +35,6 @@ class _TeacherExamListScreenState extends ConsumerState<TeacherExamListScreen> {
         title: const Text('Deneme Sınavı Sonuçları'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.camera_enhance_rounded),
-            tooltip: 'AI Kamera ile Fotoğraf Tara',
-            onPressed: () => context.push('/teacher/exams/scan'),
-          ),
-          IconButton(
             icon: const Icon(Icons.post_add_rounded),
             tooltip: 'Sonuç Gir',
             onPressed: () => context.push('/teacher/exams/create'),
@@ -51,25 +46,32 @@ class _TeacherExamListScreenState extends ConsumerState<TeacherExamListScreen> {
           if (classes.isEmpty) {
             return EmptyState(
               title: 'Henüz Sınıfınız Yok',
-              subtitle: 'Sınav sonucu girebilmek için önce bir sınıf oluşturun.',
+              subtitle:
+                  'Sınav sonucu girebilmek için önce bir sınıf oluşturun.',
               icon: Icons.bar_chart_rounded,
               action: () => context.go('/teacher/classes'),
               actionLabel: 'Sınıflarıma Git',
             );
           }
 
-          _selectedClassId ??= classes.first.id;
-          final examsAsync = ref.watch(classExamsStreamProvider(
-            (classId: _selectedClassId!, teacherId: teacherId),
-          ));
+          final activeClassId = (_selectedClassId != null &&
+                  classes.any((c) => c.id == _selectedClassId))
+              ? _selectedClassId!
+              : classes.first.id;
+          _selectedClassId = activeClassId;
+
+          final examsAsync = ref.watch(
+            classExamsStreamProvider(
+              (classId: activeClassId, teacherId: teacherId),
+            ),
+          );
 
           return Column(
             children: [
-              // ── Sınıf Seçim Çubuğu ─────────────────────────────────────────
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: DropdownButtonFormField<String>(
-                  initialValue: _selectedClassId,
+                  initialValue: activeClassId,
                   decoration: InputDecoration(
                     labelText: 'Sınıf Filtresi',
                     prefixIcon: const Icon(Icons.group_rounded),
@@ -78,18 +80,18 @@ class _TeacherExamListScreenState extends ConsumerState<TeacherExamListScreen> {
                     ),
                   ),
                   items: classes
-                      .map((c) => DropdownMenuItem(
-                            value: c.id,
-                            child: Text('${c.name} (${c.studentCount} Öğrenci)'),
-                          ))
+                      .map(
+                        (c) => DropdownMenuItem(
+                          value: c.id,
+                          child: Text('${c.name} (${c.studentCount} Öğrenci)'),
+                        ),
+                      )
                       .toList(),
                   onChanged: (val) {
                     if (val != null) setState(() => _selectedClassId = val);
                   },
                 ),
               ),
-
-              // ── Deneme Sonuçları Listesi ────────────────────────────────────
               Expanded(
                 child: examsAsync.when(
                   data: (exams) {
@@ -99,7 +101,7 @@ class _TeacherExamListScreenState extends ConsumerState<TeacherExamListScreen> {
                         subtitle:
                             'Seçili sınıf için henüz deneme sonucu girilmedi.',
                         icon: Icons.assignment_late_rounded,
-                        action: () => context.push('/teacher/exams/new'),
+                        action: () => context.push('/teacher/exams/create'),
                         actionLabel: 'Deneme Sonucu Gir',
                       );
                     }
@@ -113,7 +115,8 @@ class _TeacherExamListScreenState extends ConsumerState<TeacherExamListScreen> {
                         return _TeacherExamCard(
                           exam: exam,
                           onAnalyticsTap: () => context.push(
-                              '/teacher/analytics/${exam.studentId}'),
+                            '/teacher/analytics/${exam.studentId}',
+                          ),
                           onDelete: () => _confirmDeleteExam(context, exam),
                         );
                       },
@@ -121,33 +124,44 @@ class _TeacherExamListScreenState extends ConsumerState<TeacherExamListScreen> {
                   },
                   loading: () =>
                       const Center(child: CircularProgressIndicator()),
-                  error: (err, __) => Center(
-                      child: Text('Sınavlar yüklenemedi: $err',
-                          style: const TextStyle(color: AppColors.error))),
+                  error: (_, __) => ErrorState(
+                    message: 'Sınav sonuçları şu anda yüklenemedi.',
+                    onRetry: () => ref.invalidate(
+                      classExamsStreamProvider(
+                        (classId: activeClassId, teacherId: teacherId),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ],
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, __) => Center(child: Text('Sınıflar yüklenemedi: $err')),
+        error: (_, __) => ErrorState(
+          message: 'Sınıflar yüklenirken bir sorun oluştu.',
+          onRetry: () => ref.invalidate(teacherClassesStreamProvider),
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/teacher/exams/new'),
+        onPressed: () => context.push('/teacher/exams/create'),
         backgroundColor: AppColors.teacherPrimary,
         icon: const Icon(Icons.add_chart_rounded, color: Colors.white),
-        label: const Text('Deneme Sonucu Gir',
-            style: TextStyle(color: Colors.white)),
+        label: const Text(
+          'Deneme Sonucu Gir',
+          style: TextStyle(color: Colors.white),
+        ),
       ),
     );
   }
 
   void _confirmDeleteExam(BuildContext context, ExamResultEntity exam) {
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('${exam.examName} Kaydı Silinsin mi?'),
-        content: const Text('Bu sınav sonucunu silmek istediğinize emin misiniz?'),
+        content:
+            const Text('Bu sınav sonucunu silmek istediğinize emin misiniz?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -156,9 +170,18 @@ class _TeacherExamListScreenState extends ConsumerState<TeacherExamListScreen> {
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              await ref
+              final ok = await ref
                   .read(examNotifierProvider.notifier)
                   .deleteExam(exam.id);
+              if (!context.mounted) return;
+              if (ok) {
+                context.showSnackBar('Sınav kaydı silindi.');
+              } else {
+                context.showSnackBar(
+                  'Sınav kaydı silinemedi.',
+                  isError: true,
+                );
+              }
             },
             style: TextButton.styleFrom(foregroundColor: AppColors.error),
             child: const Text('Sil'),
@@ -198,7 +221,7 @@ class _TeacherExamCard extends ConsumerWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(studentName, style: AppTextStyles.h4),
+              Expanded(child: Text(studentName, style: AppTextStyles.h4)),
               Text(
                 exam.examDate.toTurkishDate(),
                 style: AppTextStyles.bodySmall
@@ -209,20 +232,22 @@ class _TeacherExamCard extends ConsumerWidget {
           const SizedBox(height: 6),
           Row(
             children: [
-              Text(exam.examName, style: AppTextStyles.bodyMedium),
+              Flexible(
+                child: Text(exam.examName, style: AppTextStyles.bodyMedium),
+              ),
               if (exam.publisher != null) ...[
                 const SizedBox(width: 6),
-                Text('(${exam.publisher})',
-                    style: AppTextStyles.bodySmall
-                        .copyWith(color: AppColors.textSecondary)),
+                Text(
+                  '(${exam.publisher})',
+                  style: AppTextStyles.bodySmall
+                      .copyWith(color: AppColors.textSecondary),
+                ),
               ],
             ],
           ),
           const SizedBox(height: 12),
           const Divider(height: 1),
           const SizedBox(height: 12),
-
-          // Net & Puan Özet Rozetleri
           Row(
             children: [
               Expanded(
@@ -259,8 +284,8 @@ class _TeacherExamCard extends ConsumerWidget {
                       const SizedBox(height: 2),
                       Text(
                         exam.totalScore.toStringAsFixed(1),
-                        style: AppTextStyles.h3
-                            .copyWith(color: AppColors.accent),
+                        style:
+                            AppTextStyles.h3.copyWith(color: AppColors.accent),
                       ),
                     ],
                   ),
@@ -268,7 +293,6 @@ class _TeacherExamCard extends ConsumerWidget {
               ),
             ],
           ),
-
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -279,8 +303,11 @@ class _TeacherExamCard extends ConsumerWidget {
                 label: const Text('Gelişim Grafiğini Gör'),
               ),
               IconButton(
-                icon: const Icon(Icons.delete_outline_rounded,
-                    size: 20, color: AppColors.error),
+                icon: const Icon(
+                  Icons.delete_outline_rounded,
+                  size: 20,
+                  color: AppColors.error,
+                ),
                 onPressed: onDelete,
               ),
             ],

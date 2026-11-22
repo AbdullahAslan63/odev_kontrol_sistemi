@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../auth/presentation/providers/auth_providers.dart';
+import '../../../../core/extensions/extensions.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_sizes.dart';
-import '../../../../core/widgets/app_widgets.dart';
-import '../../../../core/widgets/app_buttons.dart';
+import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_text_field.dart';
-import '../providers/class_providers.dart';
+import '../../../../core/widgets/app_widgets.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../domain/entities/class_entity.dart';
+import '../providers/class_providers.dart';
 
 class ClassListScreen extends ConsumerWidget {
   const ClassListScreen({super.key});
@@ -39,8 +39,7 @@ class ClassListScreen extends ConsumerWidget {
               subtitle:
                   'Öğrencilerinizi ekleyip ödev atamak için önce bir sınıf oluşturun.',
               icon: Icons.school_rounded,
-              action: () =>
-                  _showAddClassDialog(context, ref, user?.uid ?? ''),
+              action: () => _showAddClassDialog(context, ref, user?.uid ?? ''),
               actionLabel: 'Sınıf Oluştur',
             );
           }
@@ -60,9 +59,9 @@ class ClassListScreen extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(
-          child: Text('Sınıflar yüklenemedi: $err',
-              style: const TextStyle(color: AppColors.error)),
+        error: (_, __) => ErrorState(
+          message: 'Sınıflar yüklenirken bir sorun oluştu.',
+          onRetry: () => ref.invalidate(teacherClassesStreamProvider),
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -75,16 +74,20 @@ class ClassListScreen extends ConsumerWidget {
   }
 
   void _showAddClassDialog(
-      BuildContext context, WidgetRef ref, String teacherId) {
+    BuildContext context,
+    WidgetRef ref,
+    String teacherId,
+  ) {
     final nameController = TextEditingController();
     final schoolController = TextEditingController();
-    int selectedGrade = 8;
+    var selectedGrade = 8;
+    var isSaving = false;
     final formKey = GlobalKey<FormState>();
 
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (context, setState) {
+        builder: (ctx, setDialogState) {
           return AlertDialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppSizes.cardRadius),
@@ -127,7 +130,9 @@ class ClassListScreen extends ConsumerWidget {
                         ),
                       ),
                       onChanged: (val) {
-                        if (val != null) setState(() => selectedGrade = val);
+                        if (val != null) {
+                          setDialogState(() => selectedGrade = val);
+                        }
                       },
                     ),
                     const SizedBox(height: 12),
@@ -143,44 +148,74 @@ class ClassListScreen extends ConsumerWidget {
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(ctx),
+                onPressed: isSaving ? null : () => Navigator.pop(ctx),
                 child: const Text('İptal'),
               ),
-              PrimaryButton(
-                label: 'Oluştur',
-                onPressed: () async {
-                  if (formKey.currentState!.validate()) {
-                    final success = await ref
-                        .read(classNotifierProvider.notifier)
-                        .createClass(
-                          teacherId: teacherId,
-                          name: nameController.text.trim(),
-                          gradeLevel: selectedGrade,
-                          schoolName: schoolController.text.trim().isEmpty
-                              ? null
-                              : schoolController.text.trim(),
-                        );
-                    if (context.mounted) {
-                      Navigator.pop(ctx);
-                      if (success) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Sınıf başarıyla oluşturuldu!')),
-                        );
-                      }
-                    }
-                  }
-                },
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.teacherPrimary,
+                  minimumSize: const Size(100, 44),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: isSaving
+                    ? null
+                    : () async {
+                        if (!formKey.currentState!.validate()) return;
+                        setDialogState(() => isSaving = true);
+                        final success = await ref
+                            .read(classNotifierProvider.notifier)
+                            .createClass(
+                              teacherId: teacherId,
+                              name: nameController.text.trim(),
+                              gradeLevel: selectedGrade,
+                              schoolName: schoolController.text.trim().isEmpty
+                                  ? null
+                                  : schoolController.text.trim(),
+                            );
+                        if (!ctx.mounted) return;
+                        Navigator.pop(ctx);
+                        if (!context.mounted) return;
+                        if (success) {
+                          context.showSnackBar('Sınıf başarıyla oluşturuldu!');
+                        } else {
+                          context.showSnackBar(
+                            'Sınıf oluşturulamadı. Lütfen tekrar deneyin.',
+                            isError: true,
+                          );
+                        }
+                      },
+                child: isSaving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text(
+                        'Oluştur',
+                        style: TextStyle(color: Colors.white),
+                      ),
               ),
             ],
           );
         },
       ),
-    );
+    ).whenComplete(() {
+      nameController.dispose();
+      schoolController.dispose();
+    });
   }
 
   void _confirmDeleteClass(
-      BuildContext context, WidgetRef ref, ClassEntity classEntity) {
-    showDialog(
+    BuildContext context,
+    WidgetRef ref,
+    ClassEntity classEntity,
+  ) {
+    showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('${classEntity.name} Sınıfını Sil'),
@@ -195,9 +230,18 @@ class ClassListScreen extends ConsumerWidget {
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              await ref
+              final ok = await ref
                   .read(classNotifierProvider.notifier)
                   .deleteClass(classEntity.id);
+              if (!context.mounted) return;
+              if (ok) {
+                context.showSnackBar('${classEntity.name} sınıfı silindi.');
+              } else {
+                context.showSnackBar(
+                  'Sınıf silinemedi. Lütfen tekrar deneyin.',
+                  isError: true,
+                );
+              }
             },
             style: TextButton.styleFrom(foregroundColor: AppColors.error),
             child: const Text('Sil'),
@@ -266,10 +310,12 @@ class _ClassCard extends StatelessWidget {
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.more_vert_rounded,
-                    color: AppColors.textSecondary),
+                icon: const Icon(
+                  Icons.more_vert_rounded,
+                  color: AppColors.textSecondary,
+                ),
                 onPressed: () {
-                  showModalBottomSheet(
+                  showModalBottomSheet<void>(
                     context: context,
                     builder: (ctx) => Column(
                       mainAxisSize: MainAxisSize.min,
@@ -283,10 +329,14 @@ class _ClassCard extends StatelessWidget {
                           },
                         ),
                         ListTile(
-                          leading: const Icon(Icons.delete_outline_rounded,
-                              color: AppColors.error),
-                          title: const Text('Sınıfı Sil',
-                              style: TextStyle(color: AppColors.error)),
+                          leading: const Icon(
+                            Icons.delete_outline_rounded,
+                            color: AppColors.error,
+                          ),
+                          title: const Text(
+                            'Sınıfı Sil',
+                            style: TextStyle(color: AppColors.error),
+                          ),
                           onTap: () {
                             Navigator.pop(ctx);
                             onDelete();

@@ -3,13 +3,13 @@ import '../../domain/entities/message_entity.dart';
 import '../models/message_model.dart';
 
 class MessagesRepository {
-  final FirebaseFirestore _firestore;
-
   MessagesRepository({FirebaseFirestore? firestore})
       : _firestore = firestore ?? FirebaseFirestore.instance;
 
-  /// Toplu veya Bireysel Mesaj Gönderimi
-  Future<void> sendMessage({
+  final FirebaseFirestore _firestore;
+
+  /// Toplu veya Bireysel Mesaj Gönderimi — alıcı veli sayısını döndürür
+  Future<int> sendMessage({
     required String teacherId,
     String? teacherName,
     String? classId,
@@ -18,11 +18,10 @@ class MessagesRepository {
     required String title,
     required String body,
   }) async {
-    List<String> targetParentIds = [];
-    List<String> targetStudentIds = [];
+    final targetParentIds = <String>[];
+    final targetStudentIds = <String>[];
 
     if (targetStudentId != null) {
-      // Tek öğrenciye özel mesaj
       final studentDoc =
           await _firestore.collection('students').doc(targetStudentId).get();
       if (studentDoc.exists) {
@@ -32,7 +31,6 @@ class MessagesRepository {
         targetParentIds.addAll(parents);
       }
     } else if (classId != null) {
-      // Belirli bir sınıfa toplu duyuru
       final studentsSnap = await _firestore
           .collection('students')
           .where('classId', isEqualTo: classId)
@@ -41,11 +39,11 @@ class MessagesRepository {
 
       for (final doc in studentsSnap.docs) {
         targetStudentIds.add(doc.id);
-        final parents = List<String>.from(doc.data()['parentIds'] as List? ?? []);
+        final parents =
+            List<String>.from(doc.data()['parentIds'] as List? ?? []);
         targetParentIds.addAll(parents);
       }
     } else {
-      // Öğretmenin tüm sınıflarına/öğrencilerine toplu duyuru
       final studentsSnap = await _firestore
           .collection('students')
           .where('teacherId', isEqualTo: teacherId)
@@ -53,14 +51,13 @@ class MessagesRepository {
 
       for (final doc in studentsSnap.docs) {
         targetStudentIds.add(doc.id);
-        final parents = List<String>.from(doc.data()['parentIds'] as List? ?? []);
+        final parents =
+            List<String>.from(doc.data()['parentIds'] as List? ?? []);
         targetParentIds.addAll(parents);
       }
     }
 
-    // Uniq parent ID'ler
     final uniqueParentIds = targetParentIds.toSet().toList();
-
     final messageRef = _firestore.collection('messages').doc();
 
     final messageModel = MessageModel(
@@ -77,14 +74,15 @@ class MessagesRepository {
       createdAt: DateTime.now(),
     );
 
-    final batch = _firestore.batch();
-    batch.set(messageRef, messageModel.toFirestore());
-
-    // Velilere anlık uygulama içi bildirim (`notifications`) üret
-    for (final parentId in uniqueParentIds) {
+    // Mesaj + ilk 399 bildirim atomik batch içinde
+    final firstChunk = uniqueParentIds.take(399).toList();
+    final firstBatch = _firestore.batch();
+    firstBatch.set(messageRef, messageModel.toFirestore());
+    for (final parentId in firstChunk) {
       final notifRef = _firestore.collection('notifications').doc();
-      batch.set(notifRef, {
+      firstBatch.set(notifRef, {
         'userId': parentId,
+        'teacherId': teacherId,
         'title': '📩 $title',
         'body': body,
         'type': 'message',
@@ -93,12 +91,34 @@ class MessagesRepository {
         'createdAt': FieldValue.serverTimestamp(),
       });
     }
+    await firstBatch.commit();
 
-    await batch.commit();
+    // Veli sayısı 399'u aşarsa ek batch'ler
+    for (var i = 399; i < uniqueParentIds.length; i += 400) {
+      final chunk = uniqueParentIds.skip(i).take(400);
+      final batch = _firestore.batch();
+      for (final parentId in chunk) {
+        final notifRef = _firestore.collection('notifications').doc();
+        batch.set(notifRef, {
+          'userId': parentId,
+          'teacherId': teacherId,
+          'title': '📩 $title',
+          'body': body,
+          'type': 'message',
+          'data': {'messageId': messageRef.id},
+          'isRead': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+    }
+
+    return uniqueParentIds.length;
   }
 
   /// Öğretmenin gönderdiği tüm mesajlar akışı
   Stream<List<MessageEntity>> getTeacherMessagesStream(String teacherId) {
+    if (teacherId.isEmpty) return Stream.value([]);
     return _firestore
         .collection('messages')
         .where('teacherId', isEqualTo: teacherId)
@@ -114,6 +134,7 @@ class MessagesRepository {
 
   /// Velinin aldığı tüm öğretmen mesajları akışı
   Stream<List<MessageEntity>> getParentMessagesStream(String parentId) {
+    if (parentId.isEmpty) return Stream.value([]);
     return _firestore
         .collection('messages')
         .where('parentIds', arrayContains: parentId)

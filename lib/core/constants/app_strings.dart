@@ -36,7 +36,7 @@ class AppStrings {
   static const String roleTeacher = 'Öğretmen';
   static const String roleParent = 'Veli';
   static const String inviteCode = 'Davet Kodu';
-  static const String inviteCodeHint = 'Örnek: OT-8A-A7K9M2';
+  static const String inviteCodeHint = 'Örnek: OT-A7K9M2';
   static const String termsAccept = 'Kullanım koşullarını kabul ediyorum';
   static const String privacyPolicy = 'Gizlilik Politikası';
   static const String termsOfService = 'Kullanım Koşulları';

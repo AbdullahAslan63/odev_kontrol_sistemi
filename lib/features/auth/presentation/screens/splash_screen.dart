@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:odev_takip/features/auth/presentation/providers/auth_providers.dart';
-import 'package:odev_takip/core/theme/app_colors.dart';
-import 'package:odev_takip/core/theme/app_text_styles.dart';
-import 'package:odev_takip/core/widgets/matpusula_logo.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/eduly_logo.dart';
+import '../providers/auth_providers.dart';
 
 /// Splash ekranı.
 /// Logo gösterir ve 1.2s sonra otomatik olarak hoş geldiniz veya ana ekrana yönlendirir.
@@ -75,29 +76,35 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       }
     });
 
-    return Scaffold(
-      backgroundColor: AppColors.teacherPrimary,
-      body: Center(
-        child: FadeTransition(
-          opacity: _fadeAnim,
-          child: ScaleTransition(
-            scale: _scaleAnim,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const MatPusulaLogo(size: 104),
-                const SizedBox(height: 20),
-                Text(
-                  'Eduly',
-                  style: AppTextStyles.h1.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Geleceğini Matematikle Şekillendir',
-                  style:
-                      AppTextStyles.bodyMedium.copyWith(color: Colors.white70),
-                ),
-              ],
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        backgroundColor: AppColors.teacherPrimary,
+        body: Center(
+          child: FadeTransition(
+            opacity: _fadeAnim,
+            child: ScaleTransition(
+              scale: _scaleAnim,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const EdulyLogo(size: 104),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Eduly',
+                    style: AppTextStyles.h1.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Ödev & Eğitim Takip Platformu',
+                    style: AppTextStyles.bodyMedium
+                        .copyWith(color: Colors.white70),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../../../../core/extensions/extensions.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_sizes.dart';
+import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/utils/url_utils.dart';
 import '../../../../core/widgets/app_buttons.dart';
 import '../../../../core/widgets/app_text_field.dart';
-import '../../../../core/extensions/extensions.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
+import '../../../classes/presentation/providers/class_providers.dart';
 import '../../../students/presentation/providers/student_providers.dart';
 
-/// MatPusula Profil & Ayarlar Ekranı
-/// Öğretmen ve Veli için özel özelleştirilmiş ayarlar menüsü
+/// Eduly Profil & Ayarlar Ekranı
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
@@ -20,8 +23,35 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  static const _prefNotifications = 'pref_notifications_enabled';
+  static const _prefHomeworkAlerts = 'pref_homework_alerts_enabled';
+
   bool _notificationsEnabled = true;
   bool _homeworkAlertsEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPrefs();
+  }
+
+  Future<void> _loadPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      setState(() {
+        _notificationsEnabled = prefs.getBool(_prefNotifications) ?? true;
+        _homeworkAlertsEnabled = prefs.getBool(_prefHomeworkAlerts) ?? true;
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _savePref(String key, bool value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(key, value);
+    } catch (_) {}
+  }
 
   Future<void> _showAddChildDialog() async {
     final codeController = TextEditingController();
@@ -34,11 +64,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           builder: (ctx, setDialogState) {
             return AlertDialog(
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20)),
+                borderRadius: BorderRadius.circular(20),
+              ),
               title: const Row(
                 children: [
-                  Icon(Icons.person_add_rounded,
-                      color: AppColors.parentPrimary),
+                  Icon(Icons.person_add_rounded, color: AppColors.parentPrimary),
                   SizedBox(width: 8),
                   Expanded(child: Text('Yeni Öğrenci/Çocuk Ekle')),
                 ],
@@ -49,30 +79,34 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 children: [
                   const Text(
                     'Öğretmeninizden aldığınız davet kodunu girin:',
-                    style: TextStyle(
-                        fontSize: 13, color: AppColors.textSecondary),
+                    style:
+                        TextStyle(fontSize: 13, color: AppColors.textSecondary),
                   ),
                   const SizedBox(height: 16),
                   AppTextField(
                     label: 'Davet Kodu',
                     hint: 'Örn: OT-A7K9M2',
                     controller: codeController,
-                    prefixIcon: const Icon(Icons.key_rounded,
-                        color: AppColors.parentPrimary),
+                    textCapitalization: TextCapitalization.characters,
+                    prefixIcon: const Icon(
+                      Icons.key_rounded,
+                      color: AppColors.parentPrimary,
+                    ),
                   ),
                 ],
               ),
               actions: [
                 TextButton(
-                  onPressed:
-                      isSubmitting ? null : () => Navigator.pop(ctx),
+                  onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
                   child: const Text('İptal'),
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.parentPrimary,
+                    minimumSize: const Size(96, 44),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   onPressed: isSubmitting
                       ? null
@@ -92,20 +126,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                 ref.read(currentUserProvider)?.uid ?? '',
                               ),
                             );
-                            context.showSnackBar(
-                              'Öğrenci başarıyla bağlandı.',
-                            );
+                            context.showSnackBar('Öğrenci başarıyla bağlandı.');
                           } else {
-                            final err = ref
-                                .read(parentAuthProvider)
-                                .errorMessage;
+                            final err =
+                                ref.read(parentAuthProvider).errorMessage;
                             context.showSnackBar(
                               err ?? 'Davet kodu bağlanamadı.',
                               isError: true,
                             );
-                            ref
-                                .read(parentAuthProvider.notifier)
-                                .clearError();
+                            ref.read(parentAuthProvider.notifier).clearError();
                           }
                         },
                   child: isSubmitting
@@ -117,76 +146,139 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : const Text('Ekle',
-                          style: TextStyle(color: Colors.white)),
+                      : const Text('Ekle', style: TextStyle(color: Colors.white)),
                 ),
               ],
             );
           },
         );
       },
-    );
+    ).whenComplete(codeController.dispose);
   }
 
-  void _showChangePasswordDialog() {
+  Future<void> _showChangePasswordDialog() async {
     final oldPassController = TextEditingController();
     final newPassController = TextEditingController();
-    showDialog(
+    final formKey = GlobalKey<FormState>();
+    var isSubmitting = false;
+
+    await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.lock_rounded, color: AppColors.teacherPrimary),
-            SizedBox(width: 8),
-            Text('Şifre Değiştir'),
+      barrierDismissible: !isSubmitting,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.lock_rounded, color: AppColors.teacherPrimary),
+              SizedBox(width: 8),
+              Expanded(child: Text('Şifre Değiştir')),
+            ],
+          ),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AppTextField(
+                    label: 'Mevcut Şifre',
+                    hint: 'Mevcut şifreniz',
+                    controller: oldPassController,
+                    isPassword: true,
+                    validator: (v) {
+                      if (v == null || v.isEmpty) {
+                        return 'Mevcut şifre zorunludur.';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  AppTextField(
+                    label: 'Yeni Şifre',
+                    hint: 'En az 8 karakter',
+                    controller: newPassController,
+                    isPassword: true,
+                    textInputAction: TextInputAction.done,
+                    validator: (v) {
+                      if (v == null || v.isEmpty) {
+                        return 'Yeni şifre zorunludur.';
+                      }
+                      if (!v.isValidPassword) {
+                        return 'Şifre en az 8 karakter olmalıdır.';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
+              child: const Text('İptal'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.teacherPrimary,
+                minimumSize: const Size(110, 44),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      if (!formKey.currentState!.validate()) return;
+                      setDialogState(() => isSubmitting = true);
+                      try {
+                        await ref.read(authRepositoryProvider).changePassword(
+                              currentPassword: oldPassController.text,
+                              newPassword: newPassController.text,
+                            );
+                        if (!ctx.mounted) return;
+                        Navigator.pop(ctx);
+                        if (!mounted) return;
+                        context.showSnackBar('Şifreniz başarıyla güncellendi.');
+                      } catch (e) {
+                        if (ctx.mounted) {
+                          setDialogState(() => isSubmitting = false);
+                        }
+                        if (!mounted) return;
+                        context.showSnackBar(
+                          e.toString().replaceFirst('Exception: ', ''),
+                          isError: true,
+                        );
+                      }
+                    },
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text(
+                      'Güncelle',
+                      style: TextStyle(color: Colors.white),
+                    ),
+            ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AppTextField(
-              label: 'Mevcut Şifre',
-              hint: 'Mevcut şifreniz',
-              controller: oldPassController,
-              isPassword: true,
-            ),
-            const SizedBox(height: 12),
-            AppTextField(
-              label: 'Yeni Şifre',
-              hint: 'En az 8 karakter',
-              controller: newPassController,
-              isPassword: true,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('İptal'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.teacherPrimary,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            onPressed: () {
-              if (newPassController.text.length < 6) {
-                context.showSnackBar('Şifre en az 6 karakter olmalıdır', isError: true);
-                return;
-              }
-              Navigator.pop(ctx);
-              context.showSnackBar('Şifreniz başarıyla güncellendi! 🔒');
-            },
-            child: const Text('Güncelle', style: TextStyle(color: Colors.white)),
-          ),
-        ],
       ),
-    );
+    ).whenComplete(() {
+      oldPassController.dispose();
+      newPassController.dispose();
+    });
   }
 
   void _showPrivacyPolicyDialog() {
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -194,7 +286,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           children: [
             Icon(Icons.privacy_tip_rounded, color: AppColors.info),
             SizedBox(width: 8),
-            Text('Gizlilik Politikası & KVKK'),
+            Expanded(child: Text('Gizlilik Politikası & KVKK')),
           ],
         ),
         content: const SingleChildScrollView(
@@ -212,73 +304,147 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 '2. Veri Güvenliği:\nTüm veriler Google Firebase bulut altyapısında şifreli ve yetkilendirilmiş erişim kuralları (Firestore Security Rules) ile korunur.\n\n'
                 '3. Üçüncü Taraflarla Paylaşım:\nVerileriniz hiçbir reklam veren veya 3. taraf pazarlama şirketleri ile paylaşılmaz.\n\n'
                 '4. Haklarınız:\nHesabınızı dilediğiniz zaman silebilir veya verilerinizin silinmesini talep edebilirsiniz.',
-                style: TextStyle(fontSize: 13, height: 1.4, color: AppColors.textSecondary),
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.4,
+                  color: AppColors.textSecondary,
+                ),
               ),
             ],
           ),
         ),
         actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              UrlUtils.openUrl(context, AppConstants.privacyPolicyUrl);
+            },
+            child: const Text('Web Sayfasını Aç'),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.info,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              minimumSize: const Size(110, 44),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Okudum ve Anladım', style: TextStyle(color: Colors.white)),
+            child: const Text(
+              'Kapat',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
     );
   }
 
-  void _showDeleteAccountDialog() {
-    showDialog(
+  Future<void> _showDeleteAccountDialog() async {
+    final passwordController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    var isDeleting = false;
+
+    await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: AppColors.error),
-            SizedBox(width: 8),
-            Text('Hesabı Sil?'),
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: AppColors.error),
+              SizedBox(width: 8),
+              Expanded(child: Text('Hesabı Kalıcı Olarak Sil?')),
+            ],
+          ),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Hesabınızı sildiğinizde tüm profil bilgileriniz ve ilişkili verileriniz kalıcı olarak silinir. Bu işlem geri alınamaz.',
+                    style:
+                        TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 16),
+                  AppTextField(
+                    label: 'Onay İçin Mevcut Şifreniz',
+                    hint: 'Şifrenizi girin',
+                    controller: passwordController,
+                    isPassword: true,
+                    textInputAction: TextInputAction.done,
+                    validator: (v) {
+                      if (v == null || v.isEmpty) {
+                        return 'Devam etmek için mevcut şifrenizi girin.';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isDeleting ? null : () => Navigator.pop(ctx),
+              child: const Text('Vazgeç'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error,
+                minimumSize: const Size(124, 44),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: isDeleting
+                  ? null
+                  : () async {
+                      if (!formKey.currentState!.validate()) return;
+                      setDialogState(() => isDeleting = true);
+                      try {
+                        await ref.read(authRepositoryProvider).deleteAccount(
+                              currentPassword: passwordController.text,
+                            );
+                        if (!ctx.mounted) return;
+                        Navigator.pop(ctx);
+                        if (!mounted) return;
+                        context.showSnackBar('Hesabınız kalıcı olarak silindi.');
+                        context.go('/welcome');
+                      } catch (e) {
+                        if (ctx.mounted) {
+                          setDialogState(() => isDeleting = false);
+                        }
+                        if (!mounted) return;
+                        context.showSnackBar(
+                          e.toString().replaceFirst('Exception: ', ''),
+                          isError: true,
+                        );
+                      }
+                    },
+              child: isDeleting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text(
+                      'Hesabımı Sil',
+                      style: TextStyle(color: Colors.white),
+                    ),
+            ),
           ],
         ),
-        content: const Text(
-          'Hesabınızı sildiğinizde profil verileriniz ve bağlantılarınız sistemden kalıcı olarak temizlenir. Bu işlem geri alınamaz.',
-          style: TextStyle(fontSize: 14, color: AppColors.textPrimary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Vazgeç'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              try {
-                await ref.read(authRepositoryProvider).deleteAccount();
-                if (!mounted) return;
-                context.showSnackBar(
-                  'Hesabınız kalıcı olarak silindi.',
-                );
-                context.go('/welcome');
-              } catch (e) {
-                if (!mounted) return;
-                context.showSnackBar(
-                  e.toString().replaceFirst('Exception: ', ''),
-                  isError: true,
-                );
-              }
-            },
-            child: const Text('Hesabımı Sil', style: TextStyle(color: Colors.white)),
-          ),
-        ],
       ),
-    );
+    ).whenComplete(passwordController.dispose);
   }
 
   @override
@@ -337,24 +503,31 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            user?.name ?? (isTeacher ? 'Öğretmen Hesabı' : 'Veli Hesabı'),
+                            user?.name ??
+                                (isTeacher
+                                    ? 'Öğretmen Hesabı'
+                                    : 'Veli Hesabı'),
                             style: AppTextStyles.h4,
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            user?.email ?? 'ornek@eduly.app',
+                            user?.email ?? '',
                             style: AppTextStyles.bodySmall,
                           ),
                           const SizedBox(height: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: primaryColor.withAlpha(25),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
-                              isTeacher ? '👨‍🏫 Matematik Öğretmeni' : '👨‍👩‍👧 Veli Hesabı',
+                              isTeacher
+                                  ? '👨‍🏫 Öğretmen Hesabı'
+                                  : '👨‍👩‍👧 Veli Hesabı',
                               style: AppTextStyles.labelSmall.copyWith(
                                 color: primaryColor,
                                 fontWeight: FontWeight.bold,
@@ -369,7 +542,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
               const SizedBox(height: 24),
 
-              // ── Veli Özel: Çocuk Bağlantısı ve Yeni Çocuk Ekleme ────────
+              // ── Öğretmen Özel: Duyuru Geçmişi ────────────────────────────
+              if (isTeacher) ...[
+                _buildSettingsGroup('İletişim & Duyurular', [
+                  _buildSettingsTile(
+                    icon: Icons.campaign_outlined,
+                    title: 'Gönderilen Duyurular',
+                    subtitle: 'Velilere ilettiğiniz duyuru ve mesaj geçmişi',
+                    onTap: () => context.push('/teacher/messages'),
+                  ),
+                ]),
+                const SizedBox(height: 20),
+              ],
+
+              // ── Veli Özel: Çocuk Bağlantısı ve Yeni Çocuk Ekleme ─────────
               if (!isTeacher) ...[
                 _buildSettingsGroup(
                   'Öğrenci / Çocuk Bağlantıları',
@@ -396,50 +582,29 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       if (students.isEmpty) {
                         return [
                           const ListTile(
-                            leading: Icon(Icons.link_off_rounded,
-                                color: AppColors.textSecondary),
+                            leading: Icon(
+                              Icons.link_off_rounded,
+                              color: AppColors.textSecondary,
+                            ),
                             title: Text('Bağlı öğrenci yok'),
-                            subtitle: Text(
-                                'Öğretmenden davet kodu alıp ekleyin'),
+                            subtitle:
+                                Text('Öğretmenden davet kodu alıp ekleyin'),
                           ),
                           const Divider(height: 1),
                         ];
                       }
                       return [
                         for (final s in students) ...[
-                          ListTile(
-                            leading: const Icon(Icons.face_rounded,
-                                color: AppColors.parentPrimary),
-                            title: Text(s.name,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold)),
-                            subtitle: Text(
-                              '${s.classId} Sınıfı${s.schoolNumber != null ? ' • No: ${s.schoolNumber}' : ''}',
-                            ),
-                            trailing: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: AppColors.successLight,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Text(
-                                'Bağlı',
-                                style: TextStyle(
-                                  color: AppColors.success,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
+                          _LinkedStudentTile(studentId: s.id, name: s.name, classId: s.classId, className: s.className, schoolNumber: s.schoolNumber),
                           const Divider(height: 1),
                         ],
                       ];
                     }(),
                     ListTile(
-                      leading: const Icon(Icons.add_circle_outline_rounded,
-                          color: AppColors.parentPrimary),
+                      leading: const Icon(
+                        Icons.add_circle_outline_rounded,
+                        color: AppColors.parentPrimary,
+                      ),
                       title: const Text(
                         'Yeni Çocuk / Öğrenci Ekle',
                         style: TextStyle(
@@ -447,10 +612,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      subtitle: const Text(
-                          'Öğretmenden alınan davet kodu ile ekle'),
-                      trailing: const Icon(Icons.chevron_right_rounded,
-                          color: AppColors.parentPrimary),
+                      subtitle:
+                          const Text('Öğretmenden alınan davet kodu ile ekle'),
+                      trailing: const Icon(
+                        Icons.chevron_right_rounded,
+                        color: AppColors.parentPrimary,
+                      ),
                       onTap: _showAddChildDialog,
                     ),
                   ],
@@ -458,42 +625,77 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 const SizedBox(height: 20),
               ],
 
-              // ── Bildirim Tercihleri ────────────────────────────────────
+              // ── Bildirim Tercihleri ───────────────────────────────────────
               _buildSettingsGroup('Bildirim Ayarları', [
                 SwitchListTile(
-                  secondary: Icon(Icons.notifications_active_rounded, color: primaryColor),
-                  title: const Text('Anlık Bildirimler', style: TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: const Text('Duyuru ve mesaj bildirimlerini al'),
+                  secondary: Icon(
+                    Icons.notifications_active_rounded,
+                    color: primaryColor,
+                  ),
+                  title: const Text(
+                    'Uygulama İçi Bildirimler',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text('Duyuru ve mesaj bildirimlerini göster'),
                   value: _notificationsEnabled,
                   activeThumbColor: primaryColor,
-                  onChanged: (val) => setState(() => _notificationsEnabled = val),
+                  onChanged: (val) {
+                    setState(() => _notificationsEnabled = val);
+                    _savePref(_prefNotifications, val);
+                  },
                 ),
                 const Divider(height: 1),
                 SwitchListTile(
-                  secondary: Icon(Icons.assignment_turned_in_rounded, color: primaryColor),
-                  title: const Text('Ödev & Deneme Uyarıları', style: TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: const Text('Yaklaşan ödev ve deneme hatırlatmaları'),
+                  secondary: Icon(
+                    Icons.assignment_turned_in_rounded,
+                    color: primaryColor,
+                  ),
+                  title: const Text(
+                    'Ödev & Deneme Uyarıları',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle:
+                      const Text('Yaklaşan ödev ve deneme hatırlatmaları'),
                   value: _homeworkAlertsEnabled,
                   activeThumbColor: primaryColor,
-                  onChanged: (val) => setState(() => _homeworkAlertsEnabled = val),
+                  onChanged: (val) {
+                    setState(() => _homeworkAlertsEnabled = val);
+                    _savePref(_prefHomeworkAlerts, val);
+                  },
                 ),
               ]),
               const SizedBox(height: 20),
 
-              // ── Güvenlik & Hesap Ayarları ──────────────────────────────
-              _buildSettingsGroup('Güvenlik & Hesap', [
+              // ── Güvenlik, Yasal & Destek ─────────────────────────────────
+              _buildSettingsGroup('Güvenlik, Yasal & Destek', [
                 _buildSettingsTile(
                   icon: Icons.lock_outline_rounded,
                   title: 'Şifre Değiştir',
                   subtitle: 'Hesap şifrenizi güncelleyin',
                   onTap: _showChangePasswordDialog,
                 ),
+                const Divider(height: 1),
                 _buildSettingsTile(
                   icon: Icons.privacy_tip_outlined,
                   title: 'Gizlilik Politikası & KVKK',
-                  subtitle: 'Veri gizliliği ve kullanım şartları',
+                  subtitle: 'Kişisel verilerin korunması ve gizlilik özeti',
                   onTap: _showPrivacyPolicyDialog,
                 ),
+                const Divider(height: 1),
+                _buildSettingsTile(
+                  icon: Icons.description_outlined,
+                  title: 'Kullanım Koşulları',
+                  subtitle: 'Hizmet şartlarını web tarayıcısında görüntüleyin',
+                  onTap: () => UrlUtils.openUrl(context, AppConstants.termsUrl),
+                ),
+                const Divider(height: 1),
+                _buildSettingsTile(
+                  icon: Icons.support_agent_rounded,
+                  title: 'Destek & İletişim',
+                  subtitle: AppConstants.supportEmail,
+                  onTap: () => UrlUtils.openSupportEmail(context),
+                ),
+                const Divider(height: 1),
                 _buildSettingsTile(
                   icon: Icons.delete_forever_outlined,
                   title: 'Hesabımı Sil',
@@ -503,7 +705,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ]),
               const SizedBox(height: 32),
 
-              // ── Çıkış Yap Butonu ──────────────────────────────────────
+              // ── Çıkış Yap Butonu ─────────────────────────────────────────
               SecondaryButton(
                 label: 'Güvenli Çıkış Yap',
                 icon: Icons.logout_rounded,
@@ -561,9 +763,62 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       leading: Icon(icon, color: AppColors.textSecondary),
       title: Text(title, style: AppTextStyles.labelLarge),
       subtitle: Text(subtitle, style: AppTextStyles.bodySmall),
-      trailing: const Icon(Icons.chevron_right_rounded,
-          color: AppColors.textDisabled),
+      trailing: const Icon(
+        Icons.chevron_right_rounded,
+        color: AppColors.textDisabled,
+      ),
       onTap: onTap,
+    );
+  }
+}
+
+class _LinkedStudentTile extends ConsumerWidget {
+  const _LinkedStudentTile({
+    required this.studentId,
+    required this.name,
+    required this.classId,
+    this.className,
+    this.schoolNumber,
+  });
+
+  final String studentId;
+  final String name;
+  final String classId;
+  final String? className;
+  final String? schoolNumber;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final resolvedClassName = className ??
+        ref.watch(classByIdProvider(classId)).valueOrNull?.name;
+    final classLabel =
+        resolvedClassName != null && resolvedClassName.isNotEmpty
+            ? '$resolvedClassName Sınıfı'
+            : 'Kayıtlı Öğrenci';
+    final noPart =
+        schoolNumber != null && schoolNumber!.isNotEmpty
+            ? ' • No: $schoolNumber'
+            : '';
+
+    return ListTile(
+      leading: const Icon(Icons.face_rounded, color: AppColors.parentPrimary),
+      title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+      subtitle: Text('$classLabel$noPart'),
+      trailing: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppColors.successLight,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Text(
+          'Bağlı',
+          style: TextStyle(
+            color: AppColors.success,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
     );
   }
 }

@@ -6,10 +6,16 @@ abstract class HomeworksRepository {
   Stream<List<HomeworkEntity>> getTeacherHomeworks(String teacherId);
 
   /// Sınıfa özel ödevlerin canlı akışı
-  Stream<List<HomeworkEntity>> getClassHomeworks(String classId);
+  Stream<List<HomeworkEntity>> getClassHomeworks(
+    String classId, {
+    required String teacherId,
+  });
 
   /// Bir ödeve ait tüm öğrenci durumlarının canlı akışı (`homework_assignments`)
-  Stream<List<HomeworkAssignmentEntity>> getHomeworkAssignments(String homeworkId);
+  Stream<List<HomeworkAssignmentEntity>> getHomeworkAssignments(
+    String homeworkId, {
+    required String teacherId,
+  });
 
   /// Bir öğrencinin tüm ödev atamalarının canlı akışı (Veli ekranı için)
   Stream<List<HomeworkAssignmentEntity>> getStudentAssignments(String studentId);
@@ -31,5 +37,8 @@ abstract class HomeworksRepository {
   });
 
   /// Ödev silme
-  Future<void> deleteHomework(String homeworkId);
+  Future<void> deleteHomework(
+    String homeworkId, {
+    required String teacherId,
+  });
 }

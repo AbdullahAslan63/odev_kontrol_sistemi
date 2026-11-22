@@ -1,14 +1,15 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'app/app.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ── Sistem UI ayarları ────────────────────────────────────────────────────
+  // ── Sistem UI ayarları ─────────────────────────────────────────────────────
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -24,7 +25,7 @@ Future<void> main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  // ── Firebase başlatma ─────────────────────────────────────────────────────
+  // ── Firebase & Crashlytics başlatma ────────────────────────────────────────
   try {
     if (kIsWeb) {
       await Firebase.initializeApp(
@@ -39,6 +40,14 @@ Future<void> main() async {
       );
     } else {
       await Firebase.initializeApp();
+      await FirebaseCrashlytics.instance
+          .setCrashlyticsCollectionEnabled(!kDebugMode);
+      FlutterError.onError =
+          FirebaseCrashlytics.instance.recordFlutterFatalError;
+      PlatformDispatcher.instance.onError = (error, stack) {
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+        return true;
+      };
     }
   } catch (e) {
     debugPrint('Firebase initialize warning: $e');

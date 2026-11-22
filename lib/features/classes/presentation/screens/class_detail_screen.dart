@@ -2,15 +2,16 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../auth/presentation/providers/auth_providers.dart';
+import '../../../../core/extensions/extensions.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_sizes.dart';
-import '../../../../core/widgets/app_widgets.dart';
-import '../../../../core/widgets/app_buttons.dart';
+import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_text_field.dart';
-import '../../../students/presentation/providers/student_providers.dart';
+import '../../../../core/widgets/app_widgets.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../students/domain/entities/student_entity.dart';
+import '../../../students/presentation/providers/student_providers.dart';
+import '../providers/class_providers.dart';
 
 class ClassDetailScreen extends ConsumerStatefulWidget {
   const ClassDetailScreen({super.key, required this.classId});
@@ -35,26 +36,33 @@ class _ClassDetailScreenState extends ConsumerState<ClassDetailScreen> {
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
     final teacherId = user?.uid ?? FirebaseAuth.instance.currentUser?.uid ?? '';
-    final studentsAsync =
-        ref.watch(classStudentsStreamProvider(
-          (classId: widget.classId, teacherId: teacherId),
-        ));
+    final classAsync = ref.watch(classByIdProvider(widget.classId));
+    final className = classAsync.valueOrNull?.name;
+    final studentsAsync = ref.watch(
+      classStudentsStreamProvider(
+        (classId: widget.classId, teacherId: teacherId),
+      ),
+    );
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Sınıf Detayı & Öğrenciler'),
+        title: Text(
+          className != null && className.isNotEmpty
+              ? '$className • Öğrenciler'
+              : 'Sınıf Detayı & Öğrenciler',
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.person_add_alt_1_rounded),
             tooltip: 'Öğrenci Ekle',
-            onPressed: () => _showAddStudentDialog(context, teacherId),
+            onPressed: () =>
+                _showAddStudentDialog(context, teacherId, className),
           ),
         ],
       ),
       body: Column(
         children: [
-          // ── Arama Çubuğu ──────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: AppTextField(
@@ -64,8 +72,6 @@ class _ClassDetailScreenState extends ConsumerState<ClassDetailScreen> {
               onChanged: (val) => setState(() => _searchQuery = val.trim()),
             ),
           ),
-
-          // ── Öğrenci Listesi ───────────────────────────────────────────────
           Expanded(
             child: studentsAsync.when(
               data: (students) {
@@ -85,7 +91,7 @@ class _ClassDetailScreenState extends ConsumerState<ClassDetailScreen> {
                         : 'Arama kriterlerinize uyan öğrenci bulunamadı.',
                     icon: Icons.person_off_rounded,
                     action: () =>
-                        _showAddStudentDialog(context, user?.uid ?? ''),
+                        _showAddStudentDialog(context, teacherId, className),
                     actionLabel: 'Öğrenci Ekle',
                   );
                 }
@@ -106,115 +112,150 @@ class _ClassDetailScreenState extends ConsumerState<ClassDetailScreen> {
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, stack) => const Center(
-                child: Text('Öğrenci bilgisi yüklenemedi. Lütfen tekrar giriş yapın.',
-                    style: TextStyle(color: AppColors.textSecondary)),
+              error: (_, __) => const Center(
+                child: Text(
+                  'Öğrenci bilgisi yüklenemedi. Lütfen tekrar giriş yapın.',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
               ),
             ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddStudentDialog(context, user?.uid ?? ''),
+        onPressed: () => _showAddStudentDialog(context, teacherId, className),
         backgroundColor: AppColors.teacherPrimary,
         icon: const Icon(Icons.person_add_rounded, color: Colors.white),
-        label: const Text('Öğrenci Ekle', style: TextStyle(color: Colors.white)),
+        label:
+            const Text('Öğrenci Ekle', style: TextStyle(color: Colors.white)),
       ),
     );
   }
 
-  void _showAddStudentDialog(BuildContext context, String teacherId) {
+  void _showAddStudentDialog(
+    BuildContext context,
+    String teacherId,
+    String? className,
+  ) {
     final nameController = TextEditingController();
     final numberController = TextEditingController();
     final noteController = TextEditingController();
     final formKey = GlobalKey<FormState>();
+    var isSaving = false;
 
-    showDialog(
+    showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSizes.cardRadius),
-        ),
-        title: const Text('Yeni Öğrenci Ekle'),
-        content: Form(
-          key: formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AppTextField(
-                  controller: nameController,
-                  label: 'Öğrenci Ad Soyad',
-                  hint: 'Örn: Ahmet Yılmaz',
-                  prefixIcon: Icons.person_rounded,
-                  validator: (val) {
-                    if (val == null || val.trim().isEmpty) {
-                      return 'Öğrenci adı zorunludur.';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-                AppTextField(
-                  controller: numberController,
-                  label: 'Okul Numarası (İsteğe Bağlı)',
-                  hint: 'Örn: 104',
-                  keyboardType: TextInputType.number,
-                  prefixIcon: Icons.badge_rounded,
-                ),
-                const SizedBox(height: 12),
-                AppTextField(
-                  controller: noteController,
-                  label: 'Öğretmen Notu (İsteğe Bağlı)',
-                  hint: 'Örn: Problemler konusunu tekrar etmeli.',
-                  prefixIcon: Icons.note_alt_rounded,
-                  maxLines: 2,
-                ),
-              ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppSizes.cardRadius),
+          ),
+          title: const Text('Yeni Öğrenci Ekle'),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AppTextField(
+                    controller: nameController,
+                    label: 'Öğrenci Ad Soyad',
+                    hint: 'Örn: Ahmet Yılmaz',
+                    prefixIcon: Icons.person_rounded,
+                    validator: (val) {
+                      if (val == null || val.trim().isEmpty) {
+                        return 'Öğrenci adı zorunludur.';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  AppTextField(
+                    controller: numberController,
+                    label: 'Okul Numarası (İsteğe Bağlı)',
+                    hint: 'Örn: 104',
+                    keyboardType: TextInputType.number,
+                    prefixIcon: Icons.badge_rounded,
+                  ),
+                  const SizedBox(height: 12),
+                  AppTextField(
+                    controller: noteController,
+                    label: 'Öğretmen Notu (İsteğe Bağlı)',
+                    hint: 'Örn: Problemler konusunu tekrar etmeli.',
+                    prefixIcon: Icons.note_alt_rounded,
+                    maxLines: 2,
+                  ),
+                ],
+              ),
             ),
           ),
+          actions: [
+            TextButton(
+              onPressed: isSaving ? null : () => Navigator.pop(ctx),
+              child: const Text('İptal'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.teacherPrimary,
+                minimumSize: const Size(100, 44),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: isSaving
+                  ? null
+                  : () async {
+                      if (!formKey.currentState!.validate()) return;
+                      setDialogState(() => isSaving = true);
+                      final success = await ref
+                          .read(studentNotifierProvider.notifier)
+                          .addStudent(
+                            classId: widget.classId,
+                            className: className,
+                            teacherId: teacherId,
+                            name: nameController.text.trim(),
+                            schoolNumber: numberController.text.trim().isEmpty
+                                ? null
+                                : numberController.text.trim(),
+                            teacherNote: noteController.text.trim().isEmpty
+                                ? null
+                                : noteController.text.trim(),
+                          );
+                      if (!ctx.mounted) return;
+                      Navigator.pop(ctx);
+                      if (!context.mounted) return;
+                      if (success) {
+                        context.showSnackBar('Öğrenci başarıyla eklendi!');
+                      } else {
+                        context.showSnackBar(
+                          'Öğrenci eklenemedi. Lütfen tekrar deneyin.',
+                          isError: true,
+                        );
+                      }
+                    },
+              child: isSaving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Kaydet', style: TextStyle(color: Colors.white)),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('İptal'),
-          ),
-          PrimaryButton(
-            label: 'Kaydet',
-            onPressed: () async {
-              if (formKey.currentState!.validate()) {
-                final success = await ref
-                    .read(studentNotifierProvider.notifier)
-                    .addStudent(
-                      classId: widget.classId,
-                      teacherId: teacherId,
-                      name: nameController.text.trim(),
-                      schoolNumber: numberController.text.trim().isEmpty
-                          ? null
-                          : numberController.text.trim(),
-                      teacherNote: noteController.text.trim().isEmpty
-                          ? null
-                          : noteController.text.trim(),
-                    );
-                if (context.mounted) {
-                  Navigator.pop(ctx);
-                  if (success) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('Öğrenci başarıyla eklendi!')),
-                    );
-                  }
-                }
-              }
-            },
-          ),
-        ],
       ),
-    );
+    ).whenComplete(() {
+      nameController.dispose();
+      numberController.dispose();
+      noteController.dispose();
+    });
   }
 
   void _confirmDeleteStudent(BuildContext context, StudentEntity student) {
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('${student.name} Silinsin mi?'),
@@ -229,9 +270,18 @@ class _ClassDetailScreenState extends ConsumerState<ClassDetailScreen> {
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              await ref
+              final ok = await ref
                   .read(studentNotifierProvider.notifier)
                   .deleteStudent(student.id, widget.classId);
+              if (!context.mounted) return;
+              if (ok) {
+                context.showSnackBar('${student.name} silindi.');
+              } else {
+                context.showSnackBar(
+                  'Öğrenci silinemedi. Lütfen tekrar deneyin.',
+                  isError: true,
+                );
+              }
             },
             style: TextButton.styleFrom(foregroundColor: AppColors.error),
             child: const Text('Sil'),
@@ -293,7 +343,8 @@ class _StudentCard extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (student.schoolNumber != null) ...[
+                        if (student.schoolNumber != null &&
+                            student.schoolNumber!.isNotEmpty) ...[
                           const SizedBox(width: 6),
                           Text(
                             '#${student.schoolNumber}',
@@ -336,8 +387,20 @@ class _StudentCard extends StatelessWidget {
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.arrow_forward_ios_rounded,
-                    size: 16, color: AppColors.textSecondary),
+                icon: const Icon(
+                  Icons.delete_outline_rounded,
+                  size: 20,
+                  color: AppColors.error,
+                ),
+                tooltip: 'Öğrenciyi Sil',
+                onPressed: onDelete,
+              ),
+              IconButton(
+                icon: const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 16,
+                  color: AppColors.textSecondary,
+                ),
                 onPressed: onTap,
               ),
             ],

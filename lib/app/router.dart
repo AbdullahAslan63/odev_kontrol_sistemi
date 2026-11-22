@@ -1,53 +1,59 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../features/analytics/presentation/screens/analytics_graph_screen.dart';
 import '../features/auth/presentation/providers/auth_providers.dart';
-import '../features/auth/presentation/screens/splash_screen.dart';
-import '../features/auth/presentation/screens/welcome_screen.dart';
-import '../features/auth/presentation/screens/role_selection_screen.dart';
-import '../features/auth/presentation/screens/teacher_register_screen.dart';
-import '../features/auth/presentation/screens/parent_register_screen.dart';
-import '../features/auth/presentation/screens/login_screen.dart';
 import '../features/auth/presentation/screens/forgot_password_screen.dart';
-import '../features/dashboard/presentation/screens/teacher_home_screen.dart';
-import '../features/dashboard/presentation/screens/parent_home_screen.dart';
-
-import '../features/classes/presentation/screens/class_list_screen.dart';
+import '../features/auth/presentation/screens/login_screen.dart';
+import '../features/auth/presentation/screens/parent_register_screen.dart';
+import '../features/auth/presentation/screens/role_selection_screen.dart';
+import '../features/auth/presentation/screens/splash_screen.dart';
+import '../features/auth/presentation/screens/teacher_register_screen.dart';
+import '../features/auth/presentation/screens/welcome_screen.dart';
 import '../features/classes/presentation/screens/class_detail_screen.dart';
-import '../features/students/presentation/screens/student_detail_screen.dart';
-import '../features/homeworks/presentation/screens/teacher_homework_list_screen.dart';
+import '../features/classes/presentation/screens/class_list_screen.dart';
+import '../features/dashboard/presentation/screens/parent_home_screen.dart';
+import '../features/dashboard/presentation/screens/teacher_home_screen.dart';
+import '../features/exams/presentation/screens/create_exam_result_screen.dart';
+import '../features/exams/presentation/screens/parent_exam_list_screen.dart';
+import '../features/exams/presentation/screens/teacher_exam_list_screen.dart';
 import '../features/homeworks/presentation/screens/create_homework_screen.dart';
 import '../features/homeworks/presentation/screens/homework_detail_screen.dart';
 import '../features/homeworks/presentation/screens/parent_homework_list_screen.dart';
-import '../features/exams/presentation/screens/teacher_exam_list_screen.dart';
-import '../features/exams/presentation/screens/create_exam_result_screen.dart';
-import '../features/analytics/presentation/screens/analytics_graph_screen.dart';
-import '../features/exams/presentation/screens/parent_exam_list_screen.dart';
-import '../features/exams/presentation/screens/ai_exam_scanner_screen.dart';
-import '../features/messages/presentation/screens/teacher_new_message_screen.dart';
-import '../features/messages/presentation/screens/teacher_messages_history_screen.dart';
+import '../features/homeworks/presentation/screens/teacher_homework_list_screen.dart';
 import '../features/messages/presentation/screens/parent_messages_list_screen.dart';
+import '../features/messages/presentation/screens/teacher_messages_history_screen.dart';
+import '../features/messages/presentation/screens/teacher_new_message_screen.dart';
+import '../features/notifications/presentation/screens/notifications_screen.dart';
 import '../features/profile/presentation/screens/profile_screen.dart';
+import '../features/students/presentation/screens/student_detail_screen.dart';
+
+class _RouterRefreshNotifier extends ChangeNotifier {
+  void notify() => notifyListeners();
+}
 
 /// Uygulama router'ı.
-/// GoRouter ile rol tabanlı yönlendirme ve RoleGuard mantığı.
+/// GoRouter ile rol tabanlı yönlendirme ve tek örnekte refreshListenable.
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authStateProvider);
+  final refreshNotifier = _RouterRefreshNotifier();
+  ref.listen(authStateProvider, (_, __) => refreshNotifier.notify());
+  ref.onDispose(refreshNotifier.dispose);
 
-  return GoRouter(
+  final router = GoRouter(
     initialLocation: '/splash',
-    debugLogDiagnostics: true,
+    debugLogDiagnostics: kDebugMode,
+    refreshListenable: refreshNotifier,
     redirect: (context, state) {
-      final isLoggedIn = authState.valueOrNull != null;
+      final authState = ref.read(authStateProvider);
       final user = authState.valueOrNull;
+      final isLoggedIn = user != null;
       final isLoading = authState.isLoading;
 
-      // Yükleniyor — bekle
       if (isLoading) return null;
 
       final location = state.uri.toString();
 
-      // Auth sayfaları
       final isAuthPage = location.startsWith('/login') ||
           location.startsWith('/register') ||
           location.startsWith('/role-selection') ||
@@ -55,22 +61,17 @@ final routerProvider = Provider<GoRouter>((ref) {
           location.startsWith('/welcome') ||
           location.startsWith('/splash');
 
-      // Giriş yoksa ve splash/kök dizindeyse welcome'a yönlendir
       if (!isLoggedIn && (location == '/splash' || location == '/')) {
         return '/welcome';
       }
 
-      // Giriş yoksa ve auth sayfası dışında ise welcome'a yönlendir
       if (!isLoggedIn && !isAuthPage) return '/welcome';
 
-      // Giriş varsa rol tabanlı yönlendir
       if (isLoggedIn) {
         if (isAuthPage) {
-          return user!.isTeacher ? '/teacher/home' : '/parent/home';
+          return user.isTeacher ? '/teacher/home' : '/parent/home';
         }
-
-        // Rol karışıklığı — öğretmen veli paneline giremez ve vice versa
-        if (user!.isTeacher && location.startsWith('/parent')) {
+        if (user.isTeacher && location.startsWith('/parent')) {
           return '/teacher/home';
         }
         if (user.isParent && location.startsWith('/teacher')) {
@@ -160,10 +161,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const CreateExamResultScreen(),
           ),
           GoRoute(
-            path: '/teacher/exams/scan',
-            builder: (context, state) => const AiExamScannerScreen(),
-          ),
-          GoRoute(
             path: '/teacher/analytics/:studentId',
             builder: (context, state) => AnalyticsGraphScreen(
               studentId: state.pathParameters['studentId']!,
@@ -176,6 +173,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/teacher/messages/new',
             builder: (context, state) => const TeacherNewMessageScreen(),
+          ),
+          GoRoute(
+            path: '/teacher/notifications',
+            builder: (context, state) => const NotificationsScreen(),
           ),
           GoRoute(
             path: '/teacher/more',
@@ -207,6 +208,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const ParentMessagesListScreen(),
           ),
           GoRoute(
+            path: '/parent/notifications',
+            builder: (context, state) => const NotificationsScreen(),
+          ),
+          GoRoute(
             path: '/parent/profile',
             builder: (context, state) => const ProfileScreen(),
           ),
@@ -219,6 +224,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ),
   );
+
+  ref.onDispose(router.dispose);
+  return router;
 });
 
 // ── Öğretmen Shell (Bottom Navigation) ───────────────────────────────────────
@@ -275,7 +283,10 @@ class TeacherShell extends StatelessWidget {
       return 1;
     }
     if (location.startsWith('/teacher/homeworks')) return 2;
-    if (location.startsWith('/teacher/exams')) return 3;
+    if (location.startsWith('/teacher/exams') ||
+        location.startsWith('/teacher/analytics')) {
+      return 3;
+    }
     return 4;
   }
 

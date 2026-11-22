@@ -1,13 +1,13 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:fl_chart/fl_chart.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_sizes.dart';
+import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_widgets.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
-import '../../../students/presentation/providers/student_providers.dart';
 import '../../../exams/presentation/providers/exam_providers.dart';
+import '../../../students/presentation/providers/student_providers.dart';
 
 class AnalyticsGraphScreen extends ConsumerWidget {
   const AnalyticsGraphScreen({super.key, required this.studentId});
@@ -21,7 +21,9 @@ class AnalyticsGraphScreen extends ConsumerWidget {
     final examsAsync = ref.watch(
       studentExamsStreamProvider((studentId: studentId, teacherId: teacherId)),
     );
-    final goalAsync = ref.watch(studentGoalStreamProvider(studentId));
+    final goalAsync = ref.watch(
+      studentGoalStreamProvider((studentId: studentId, teacherId: teacherId)),
+    );
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -45,7 +47,6 @@ class AnalyticsGraphScreen extends ConsumerWidget {
                 );
               }
 
-              // Sınavları tarihe göre eskiden yeniye doğru sırala (Grafik sol->sağ akışı için)
               final chronologicalExams = exams.reversed.toList();
 
               return SingleChildScrollView(
@@ -53,7 +54,7 @@ class AnalyticsGraphScreen extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ── Öğrenci Başlık Kartı ────────────────────────────────
+                    // ── Öğrenci Başlık Kartı ─────────────────────────────────
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -66,10 +67,12 @@ class AnalyticsGraphScreen extends ConsumerWidget {
                         children: [
                           CircleAvatar(
                             radius: 24,
-                            backgroundColor: AppColors.teacherPrimary
-                                .withValues(alpha: 0.1),
+                            backgroundColor:
+                                AppColors.teacherPrimary.withValues(alpha: 0.1),
                             child: Text(
-                              student.name[0].toUpperCase(),
+                              student.name.isNotEmpty
+                                  ? student.name[0].toUpperCase()
+                                  : '?',
                               style: AppTextStyles.h3
                                   .copyWith(color: AppColors.teacherPrimary),
                             ),
@@ -80,9 +83,15 @@ class AnalyticsGraphScreen extends ConsumerWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(student.name, style: AppTextStyles.h3),
-                                Text('No: ${student.schoolNumber}',
-                                    style: AppTextStyles.bodySmall.copyWith(
-                                        color: AppColors.textSecondary)),
+                                Text(
+                                  student.schoolNumber != null &&
+                                          student.schoolNumber!.isNotEmpty
+                                      ? 'Okul No: #${student.schoolNumber}'
+                                      : 'Okul No Belirtilmemiş',
+                                  style: AppTextStyles.bodySmall.copyWith(
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -92,18 +101,24 @@ class AnalyticsGraphScreen extends ConsumerWidget {
 
                     const SizedBox(height: 16),
 
-                    // ── Hedef İlerleme Kartı ────────────────────────────────
+                    // ── Hedef İlerleme Kartı ─────────────────────────────────
                     goalAsync.when(
                       data: (goal) {
-                        final target = goal?.targetValue ?? student.targetScore;
                         final latestExam = exams.first;
-                        final current = latestExam.totalScore > 0
-                            ? latestExam.totalScore
-                            : latestExam.totalNet;
-                        final remaining = (target - current).clamp(0, 500);
+                        final isNetGoal = goal?.type == 'net';
+                        final target = goal?.targetValue ?? student.targetScore;
+                        final current = isNetGoal
+                            ? latestExam.totalNet
+                            : latestExam.totalScore;
+                        final unitLabel = isNetGoal ? 'Net' : 'Puan';
+                        final remaining = (target - current).clamp(0, target);
                         final progress = target > 0
                             ? (current / target).clamp(0.0, 1.0)
                             : 0.0;
+
+                        if (!isNetGoal && latestExam.totalScore <= 0) {
+                          return const SizedBox.shrink();
+                        }
 
                         return Container(
                           padding: const EdgeInsets.all(16),
@@ -112,7 +127,8 @@ class AnalyticsGraphScreen extends ConsumerWidget {
                             borderRadius:
                                 BorderRadius.circular(AppSizes.cardRadius),
                             border: Border.all(
-                                color: AppColors.accent.withValues(alpha: 0.3)),
+                              color: AppColors.accent.withValues(alpha: 0.3),
+                            ),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -123,7 +139,7 @@ class AnalyticsGraphScreen extends ConsumerWidget {
                                 children: [
                                   Text('Hedef Takibi', style: AppTextStyles.h4),
                                   Text(
-                                    '${current.toStringAsFixed(1)} / ${target.toStringAsFixed(0)}',
+                                    '${current.toStringAsFixed(1)} / ${target.toStringAsFixed(0)} $unitLabel',
                                     style: AppTextStyles.h4
                                         .copyWith(color: AppColors.accent),
                                   ),
@@ -140,11 +156,12 @@ class AnalyticsGraphScreen extends ConsumerWidget {
                               const SizedBox(height: 8),
                               Text(
                                 remaining > 0
-                                    ? 'Hedefe Kalan: ${remaining.toStringAsFixed(1)} Puan'
-                                    : '🎉 Tebrikler! Hedefe ulaşıldı!',
+                                    ? 'Hedefe Kalan: ${remaining.toStringAsFixed(1)} $unitLabel'
+                                    : 'Tebrikler! Hedefe ulaşıldı!',
                                 style: AppTextStyles.bodySmall.copyWith(
-                                    color: AppColors.textSecondary,
-                                    fontWeight: FontWeight.bold),
+                                  color: AppColors.textSecondary,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ],
                           ),
@@ -158,7 +175,6 @@ class AnalyticsGraphScreen extends ConsumerWidget {
                     Text('Net İlerleme Grafiği', style: AppTextStyles.h3),
                     const SizedBox(height: 12),
 
-                    // ── fl_chart Çizgi Grafiği ────────────────────────────────
                     Container(
                       height: 240,
                       padding: const EdgeInsets.fromLTRB(12, 20, 20, 12),
@@ -175,7 +191,11 @@ class AnalyticsGraphScreen extends ConsumerWidget {
                             bottomTitles: AxisTitles(
                               sideTitles: SideTitles(
                                 showTitles: true,
+                                interval: 1,
                                 getTitlesWidget: (value, meta) {
+                                  if (value != value.roundToDouble()) {
+                                    return const SizedBox.shrink();
+                                  }
                                   final idx = value.toInt();
                                   if (idx >= 0 &&
                                       idx < chronologicalExams.length) {
@@ -187,14 +207,16 @@ class AnalyticsGraphScreen extends ConsumerWidget {
                                       ),
                                     );
                                   }
-                                  return const Text('');
+                                  return const SizedBox.shrink();
                                 },
                               ),
                             ),
                             topTitles: const AxisTitles(
-                                sideTitles: SideTitles(showTitles: false)),
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
                             rightTitles: const AxisTitles(
-                                sideTitles: SideTitles(showTitles: false)),
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
                           ),
                           borderData: FlBorderData(
                             show: true,
@@ -205,10 +227,12 @@ class AnalyticsGraphScreen extends ConsumerWidget {
                               spots: chronologicalExams
                                   .asMap()
                                   .entries
-                                  .map((entry) => FlSpot(
-                                        entry.key.toDouble(),
-                                        entry.value.totalNet,
-                                      ))
+                                  .map(
+                                    (entry) => FlSpot(
+                                      entry.key.toDouble(),
+                                      entry.value.totalNet,
+                                    ),
+                                  )
                                   .toList(),
                               isCurved: true,
                               color: AppColors.teacherPrimary,
@@ -230,14 +254,15 @@ class AnalyticsGraphScreen extends ConsumerWidget {
                     Text('Son Sınav Ders Dağılımı', style: AppTextStyles.h3),
                     const SizedBox(height: 12),
 
-                    // ── Son Sınav Ders Bazlı Skoru ──────────────────────────────
                     ...exams.first.scores.entries.map((e) {
                       final subject = e.key;
                       final score = e.value;
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 12),
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.surface,
                           borderRadius:
@@ -264,11 +289,21 @@ class AnalyticsGraphScreen extends ConsumerWidget {
               );
             },
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, __) => Center(child: Text('Sınavlar yüklenemedi: $err')),
+            error: (_, __) => ErrorState(
+              message: 'Sınavlar şu anda yüklenemedi.',
+              onRetry: () => ref.invalidate(
+                studentExamsStreamProvider(
+                  (studentId: studentId, teacherId: teacherId),
+                ),
+              ),
+            ),
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, __) => Center(child: Text('Öğrenci okunamadı: $err')),
+        error: (_, __) => ErrorState(
+          message: 'Öğrenci bilgisi şu anda yüklenemedi.',
+          onRetry: () => ref.invalidate(studentStreamProvider(studentId)),
+        ),
       ),
     );
   }

@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../data/repositories/homeworks_repository_impl.dart';
@@ -17,12 +18,17 @@ final teacherHomeworksStreamProvider =
   return ref.watch(homeworksRepositoryProvider).getTeacherHomeworks(user.uid);
 });
 
-/// Bir ödeve ait öğrenci durumlarının akışı
+/// Bir ödeve ait öğrenci durumlarının akışı (teacherId zorunlu)
 final homeworkAssignmentsStreamProvider = StreamProvider.family<
-    List<HomeworkAssignmentEntity>, String>((ref, homeworkId) {
-  return ref
-      .watch(homeworksRepositoryProvider)
-      .getHomeworkAssignments(homeworkId);
+    List<HomeworkAssignmentEntity>,
+    ({String homeworkId, String teacherId})>((ref, params) {
+  final teacherId = params.teacherId.isNotEmpty
+      ? params.teacherId
+      : (FirebaseAuth.instance.currentUser?.uid ?? '');
+  return ref.watch(homeworksRepositoryProvider).getHomeworkAssignments(
+        params.homeworkId,
+        teacherId: teacherId,
+      );
 });
 
 /// Bir öğrenciye ait tüm ödev atamalarının canlı akışı (Veli paneli için)
@@ -99,10 +105,13 @@ class HomeworkNotifier extends StateNotifier<AsyncValue<void>> {
     }
   }
 
-  Future<bool> deleteHomework(String homeworkId) async {
+  Future<bool> deleteHomework(
+    String homeworkId, {
+    required String teacherId,
+  }) async {
     state = const AsyncValue.loading();
     try {
-      await _repo.deleteHomework(homeworkId);
+      await _repo.deleteHomework(homeworkId, teacherId: teacherId);
       state = const AsyncValue.data(null);
       return true;
     } catch (e, st) {

@@ -1,15 +1,16 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:fl_chart/fl_chart.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/theme/app_sizes.dart';
-import '../../../../core/widgets/app_widgets.dart';
 import '../../../../core/extensions/extensions.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_sizes.dart';
+import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/app_widgets.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
-import '../providers/exam_providers.dart';
-import '../../domain/entities/exam_result_entity.dart';
 import '../../../students/presentation/providers/student_providers.dart';
+import '../../../students/presentation/widgets/parent_child_selector.dart';
+import '../../domain/entities/exam_result_entity.dart';
+import '../providers/exam_providers.dart';
 
 class ParentExamListScreen extends ConsumerWidget {
   const ParentExamListScreen({super.key});
@@ -27,8 +28,9 @@ class ParentExamListScreen extends ConsumerWidget {
       ),
       body: studentsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(
-          child: Text('Öğrenci bilgisi yüklenemedi.\n$err', textAlign: TextAlign.center),
+        error: (_, __) => ErrorState(
+          message: 'Öğrenci bilgisi şu anda yüklenemedi.',
+          onRetry: () => ref.invalidate(parentStudentsStreamProvider(parentUid)),
         ),
         data: (students) {
           if (students.isEmpty) {
@@ -40,29 +42,53 @@ class ParentExamListScreen extends ConsumerWidget {
             );
           }
 
-          final studentId = students.first.id;
+          final activeStudent = resolveSelectedParentStudent(ref, students);
           final examsAsync = ref.watch(
             studentExamsStreamProvider(
-              (studentId: studentId, teacherId: null),
+              (studentId: activeStudent.id, teacherId: null),
             ),
           );
 
-          return examsAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, _) => Center(
-              child: Text('Deneme sonuçları yüklenemedi.\n$err',
-                  textAlign: TextAlign.center),
-            ),
-            data: (exams) {
-              if (exams.isEmpty) {
-                return const EmptyState(
-                  title: 'Henüz Deneme Yok',
-                  subtitle:
-                      'Öğretmen deneme sonucu girdiğinde çocuğunuza ait sonuçlar burada listelenir.',
-                );
-              }
-              return _ExamResultsBody(exams: exams);
-            },
+          return Column(
+            children: [
+              if (students.length > 1)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSizes.pagePadding,
+                    AppSizes.pagePadding,
+                    AppSizes.pagePadding,
+                    0,
+                  ),
+                  child: ParentChildSelectorBar(
+                    students: students,
+                    activeStudent: activeStudent,
+                  ),
+                ),
+              Expanded(
+                child: examsAsync.when(
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (_, __) => ErrorState(
+                    message: 'Deneme sonuçları yüklenirken bir sorun oluştu.',
+                    onRetry: () => ref.invalidate(
+                      studentExamsStreamProvider(
+                        (studentId: activeStudent.id, teacherId: null),
+                      ),
+                    ),
+                  ),
+                  data: (exams) {
+                    if (exams.isEmpty) {
+                      return const EmptyState(
+                        title: 'Henüz Deneme Yok',
+                        subtitle:
+                            'Öğretmen deneme sonucu girdiğinde çocuğunuza ait sonuçlar burada listelenir.',
+                      );
+                    }
+                    return _ExamResultsBody(exams: exams);
+                  },
+                ),
+              ),
+            ],
           );
         },
       ),
@@ -100,28 +126,31 @@ class _ExamResultsBody extends StatelessWidget {
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
+                      interval: 1,
                       getTitlesWidget: (value, meta) {
+                        if (value != value.roundToDouble()) {
+                          return const SizedBox.shrink();
+                        }
                         final idx = value.toInt();
                         if (idx >= 0 && idx < chronologicalExams.length) {
                           return Padding(
                             padding: const EdgeInsets.only(top: 6),
                             child: Text(
-                              chronologicalExams[idx]
-                                  .examName
-                                  .split(' ')
-                                  .last,
+                              chronologicalExams[idx].examName.split(' ').last,
                               style: const TextStyle(fontSize: 10),
                             ),
                           );
                         }
-                        return const Text('');
+                        return const SizedBox.shrink();
                       },
                     ),
                   ),
                   topTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
                   rightTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
                 ),
                 borderData: FlBorderData(
                   show: true,
@@ -132,10 +161,12 @@ class _ExamResultsBody extends StatelessWidget {
                     spots: chronologicalExams
                         .asMap()
                         .entries
-                        .map((entry) => FlSpot(
-                              entry.key.toDouble(),
-                              entry.value.totalNet,
-                            ))
+                        .map(
+                          (entry) => FlSpot(
+                            entry.key.toDouble(),
+                            entry.value.totalNet,
+                          ),
+                        )
                         .toList(),
                     isCurved: true,
                     color: AppColors.parentPrimary,
@@ -194,14 +225,16 @@ class _ExamResultsBody extends StatelessWidget {
                         child: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: AppColors.parentPrimary
-                                .withValues(alpha: 0.08),
+                            color:
+                                AppColors.parentPrimary.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Column(
                             children: [
-                              Text('Toplam Net',
-                                  style: AppTextStyles.labelSmall),
+                              Text(
+                                'Toplam Net',
+                                style: AppTextStyles.labelSmall,
+                              ),
                               const SizedBox(height: 2),
                               Text(
                                 exam.totalNet.toStringAsFixed(2),

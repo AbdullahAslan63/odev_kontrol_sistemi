@@ -30,16 +30,17 @@ abstract class AuthRepository {
     required String password,
   });
 
-  /// Veli için şifresiz telefon numarası ile hızlı giriş/kayıt
-  Future<AppUser> signInOrRegisterParentWithPhone({
-    required String phone,
-  });
-
   /// Çıkış
   Future<void> signOut();
 
+  /// Mevcut şifreyi doğrular ve yeni şifre ile günceller
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  });
+
   /// Hesabı hem Firebase Auth hem Firestore'dan kalıcı olarak sil
-  Future<void> deleteAccount();
+  Future<void> deleteAccount({required String currentPassword});
 
   /// Şifre sıfırlama e-postası gönder
   Future<void> sendPasswordResetEmail(String email);

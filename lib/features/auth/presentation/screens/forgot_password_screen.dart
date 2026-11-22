@@ -59,12 +59,13 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: AppColors.textPrimary),
+          icon:
+              const Icon(Icons.arrow_back_rounded, color: AppColors.textPrimary),
           onPressed: () => context.pop(),
         ),
       ),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSizes.pagePadding * 1.5),
           child: Form(
             key: _formKey,
@@ -92,13 +93,14 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                   style: AppTextStyles.bodyMedium,
                 ),
                 const SizedBox(height: 32),
-
                 AppTextField(
                   label: AppStrings.email,
                   hint: 'ornek@okul.com',
                   controller: _emailController,
-                  prefixIcon: const Icon(Icons.email_outlined,
-                      color: AppColors.textSecondary),
+                  prefixIcon: const Icon(
+                    Icons.email_outlined,
+                    color: AppColors.textSecondary,
+                  ),
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.done,
                   onFieldSubmitted: (_) => _submit(),
@@ -112,7 +114,6 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                     return null;
                   },
                 ),
-
                 if (state.isSuccess) ...[
                   const SizedBox(height: 20),
                   Container(
@@ -124,8 +125,10 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.check_circle_rounded,
-                            color: AppColors.success),
+                        const Icon(
+                          Icons.check_circle_rounded,
+                          color: AppColors.success,
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
@@ -138,7 +141,6 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                     ),
                   ),
                 ],
-
                 const SizedBox(height: 32),
                 PrimaryButton(
                   label: AppStrings.resetPassword,

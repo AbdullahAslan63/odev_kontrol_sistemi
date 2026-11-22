@@ -1,18 +1,21 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../auth/presentation/providers/auth_providers.dart';
+import '../../../../core/extensions/extensions.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_sizes.dart';
+import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/utils/app_utils.dart';
 import '../../../../core/widgets/app_buttons.dart';
 import '../../../../core/widgets/app_text_field.dart';
-import '../../../../core/utils/app_utils.dart';
-import '../../../../core/extensions/extensions.dart';
+import '../../../../core/widgets/app_widgets.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../classes/presentation/providers/class_providers.dart';
 import '../../../students/presentation/providers/student_providers.dart';
-import '../providers/exam_providers.dart';
 import '../../domain/entities/exam_result_entity.dart';
+import '../providers/exam_providers.dart';
 
 class CreateExamResultScreen extends ConsumerStatefulWidget {
   const CreateExamResultScreen({super.key});
@@ -73,11 +76,16 @@ class _CreateExamResultScreenState
     super.dispose();
   }
 
+  int _parseNonNegativeInt(String? raw) {
+    final parsed = int.tryParse(raw?.trim() ?? '0') ?? 0;
+    return max(0, parsed);
+  }
+
   double _calculateTotalNet() {
-    double sum = 0.0;
+    var sum = 0.0;
     for (final s in _subjects) {
-      final c = int.tryParse(_correctControllers[s]?.text ?? '0') ?? 0;
-      final w = int.tryParse(_wrongControllers[s]?.text ?? '0') ?? 0;
+      final c = _parseNonNegativeInt(_correctControllers[s]?.text);
+      final w = _parseNonNegativeInt(_wrongControllers[s]?.text);
       sum += NetCalculator.calculate(c, w);
     }
     return sum;
@@ -102,10 +110,17 @@ class _CreateExamResultScreenState
             return const Center(child: Text('Önce bir sınıf eklemelisiniz.'));
           }
 
-          _selectedClassId ??= classes.first.id;
-          final studentsAsync = ref.watch(classStudentsStreamProvider(
-            (classId: _selectedClassId!, teacherId: user?.uid ?? ''),
-          ));
+          final activeClassId = (_selectedClassId != null &&
+                  classes.any((c) => c.id == _selectedClassId))
+              ? _selectedClassId!
+              : classes.first.id;
+          _selectedClassId = activeClassId;
+
+          final studentsAsync = ref.watch(
+            classStudentsStreamProvider(
+              (classId: activeClassId, teacherId: user?.uid ?? ''),
+            ),
+          );
 
           return Form(
             key: _formKey,
@@ -114,9 +129,8 @@ class _CreateExamResultScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── Sınıf Seçimi ──────────────────────────────────────────
                   DropdownButtonFormField<String>(
-                    initialValue: _selectedClassId,
+                    initialValue: activeClassId,
                     decoration: InputDecoration(
                       labelText: 'Sınıf Seçin',
                       prefixIcon: const Icon(Icons.group_rounded),
@@ -126,10 +140,12 @@ class _CreateExamResultScreenState
                       ),
                     ),
                     items: classes
-                        .map((c) => DropdownMenuItem(
-                              value: c.id,
-                              child: Text(c.name),
-                            ))
+                        .map(
+                          (c) => DropdownMenuItem(
+                            value: c.id,
+                            child: Text(c.name),
+                          ),
+                        )
                         .toList(),
                     onChanged: (val) {
                       if (val != null) {
@@ -140,21 +156,25 @@ class _CreateExamResultScreenState
                       }
                     },
                   ),
-
                   const SizedBox(height: 16),
-
-                  // ── Öğrenci Seçimi ─────────────────────────────────────────
                   studentsAsync.when(
                     data: (students) {
                       if (students.isEmpty) {
+                        _selectedStudentId = null;
                         return const Text(
-                            'Bu sınıfta henüz öğrenci kaydı yok.',
-                            style: TextStyle(color: AppColors.warning));
+                          'Bu sınıfta henüz öğrenci kaydı yok.',
+                          style: TextStyle(color: AppColors.warning),
+                        );
                       }
-                      _selectedStudentId ??= students.first.id;
+
+                      final activeStudentId = (_selectedStudentId != null &&
+                              students.any((s) => s.id == _selectedStudentId))
+                          ? _selectedStudentId!
+                          : students.first.id;
+                      _selectedStudentId = activeStudentId;
 
                       return DropdownButtonFormField<String>(
-                        initialValue: _selectedStudentId,
+                        initialValue: activeStudentId,
                         decoration: InputDecoration(
                           labelText: 'Öğrenci Seçin',
                           prefixIcon: const Icon(Icons.person_rounded),
@@ -164,10 +184,17 @@ class _CreateExamResultScreenState
                           ),
                         ),
                         items: students
-                            .map((s) => DropdownMenuItem(
-                                  value: s.id,
-                                  child: Text('${s.name} (${s.schoolNumber})'),
-                                ))
+                            .map(
+                              (s) => DropdownMenuItem(
+                                value: s.id,
+                                child: Text(
+                                  s.schoolNumber != null &&
+                                          s.schoolNumber!.isNotEmpty
+                                      ? '${s.name} (#${s.schoolNumber})'
+                                      : s.name,
+                                ),
+                              ),
+                            )
                             .toList(),
                         onChanged: (val) {
                           if (val != null) {
@@ -177,12 +204,9 @@ class _CreateExamResultScreenState
                       );
                     },
                     loading: () => const CircularProgressIndicator(),
-                    error: (err, __) => Text('Öğrenciler okunamadı: $err'),
+                    error: (_, __) => const Text('Öğrenciler yüklenemedi.'),
                   ),
-
                   const SizedBox(height: 16),
-
-                  // ── Deneme Adı & Yayınevi ────────────────────────────────
                   Row(
                     children: [
                       Expanded(
@@ -205,10 +229,7 @@ class _CreateExamResultScreenState
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 16),
-
-                  // ── Toplam Puan & Tarih ──────────────────────────────────
                   Row(
                     children: [
                       Expanded(
@@ -217,7 +238,8 @@ class _CreateExamResultScreenState
                           label: 'Toplam Puan',
                           hint: 'Örn: 425.5',
                           keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true),
+                            decimal: true,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -241,15 +263,20 @@ class _CreateExamResultScreenState
                               },
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 14),
+                                  horizontal: 12,
+                                  vertical: 14,
+                                ),
                                 decoration: BoxDecoration(
                                   color: AppColors.surface,
                                   borderRadius: BorderRadius.circular(
-                                      AppSizes.inputRadius),
+                                    AppSizes.inputRadius,
+                                  ),
                                   border: Border.all(color: AppColors.border),
                                 ),
-                                child: Text(_examDate.toTurkishDate(),
-                                    style: AppTextStyles.bodyMedium),
+                                child: Text(
+                                  _examDate.toTurkishDate(),
+                                  style: AppTextStyles.bodyMedium,
+                                ),
                               ),
                             ),
                           ],
@@ -257,24 +284,23 @@ class _CreateExamResultScreenState
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 20),
-
-                  // ── Anlık Canlı Toplam Net Kartı ───────────────────────────
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: AppColors.teacherPrimary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(AppSizes.cardRadius),
                       border: Border.all(
-                          color:
-                              AppColors.teacherPrimary.withValues(alpha: 0.3)),
+                        color: AppColors.teacherPrimary.withValues(alpha: 0.3),
+                      ),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Hesaplanan Toplam Net:',
-                          style: AppTextStyles.h4),
+                        Text(
+                          'Hesaplanan Toplam Net:',
+                          style: AppTextStyles.h4,
+                        ),
                         Text(
                           totalNet.toStringAsFixed(2),
                           style: AppTextStyles.h2
@@ -283,13 +309,12 @@ class _CreateExamResultScreenState
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 20),
-                  Text('Ders Bazlı Sonuçlar (D / Y / B)',
-                      style: AppTextStyles.h4),
+                  Text(
+                    'Ders Bazlı Sonuçlar (D / Y / B)',
+                    style: AppTextStyles.h4,
+                  ),
                   const SizedBox(height: 10),
-
-                  // ── Ders Input Listesi ─────────────────────────────────────
                   ..._subjects.map((subject) {
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -311,11 +336,18 @@ class _CreateExamResultScreenState
                                 child: TextField(
                                   controller: _correctControllers[subject],
                                   keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                  ],
                                   onChanged: (_) => setState(() {}),
                                   decoration: const InputDecoration(
-                                      labelText: 'Doğru',
-                                      prefixIcon: Icon(Icons.check_circle,
-                                          color: AppColors.success, size: 18)),
+                                    labelText: 'Doğru',
+                                    prefixIcon: Icon(
+                                      Icons.check_circle,
+                                      color: AppColors.success,
+                                      size: 18,
+                                    ),
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -323,11 +355,18 @@ class _CreateExamResultScreenState
                                 child: TextField(
                                   controller: _wrongControllers[subject],
                                   keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                  ],
                                   onChanged: (_) => setState(() {}),
                                   decoration: const InputDecoration(
-                                      labelText: 'Yanlış',
-                                      prefixIcon: Icon(Icons.cancel,
-                                          color: AppColors.error, size: 18)),
+                                    labelText: 'Yanlış',
+                                    prefixIcon: Icon(
+                                      Icons.cancel,
+                                      color: AppColors.error,
+                                      size: 18,
+                                    ),
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -335,11 +374,18 @@ class _CreateExamResultScreenState
                                 child: TextField(
                                   controller: _blankControllers[subject],
                                   keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                  ],
                                   onChanged: (_) => setState(() {}),
                                   decoration: const InputDecoration(
-                                      labelText: 'Boş',
-                                      prefixIcon: Icon(Icons.help_outline,
-                                          color: AppColors.warning, size: 18)),
+                                    labelText: 'Boş',
+                                    prefixIcon: Icon(
+                                      Icons.help_outline,
+                                      color: AppColors.warning,
+                                      size: 18,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ],
@@ -348,64 +394,71 @@ class _CreateExamResultScreenState
                       ),
                     );
                   }),
-
                   const SizedBox(height: 20),
-
                   PrimaryButton(
                     label: 'Sınav Sonucunu Kaydet',
                     isLoading: examState.isLoading,
                     icon: Icons.save_rounded,
                     onPressed: () async {
-                      if (_formKey.currentState!.validate() &&
-                          _selectedClassId != null &&
-                          _selectedStudentId != null) {
-                        final scoresMap = <String, SubjectScore>{};
-                        for (final s in _subjects) {
-                          final c =
-                              int.tryParse(_correctControllers[s]?.text ?? '0') ??
-                                  0;
-                          final w =
-                              int.tryParse(_wrongControllers[s]?.text ?? '0') ??
-                                  0;
-                          final b =
-                              int.tryParse(_blankControllers[s]?.text ?? '0') ??
-                                  0;
-                          scoresMap[s] = SubjectScore(
-                            correct: c,
-                            wrong: w,
-                            blank: b,
-                            net: NetCalculator.calculate(c, w),
+                      if (!_formKey.currentState!.validate()) return;
+                      if (_selectedStudentId == null) {
+                        context.showSnackBar(
+                          'Önce öğrenci seçmelisiniz.',
+                          isError: true,
+                        );
+                        return;
+                      }
+
+                      final scoresMap = <String, SubjectScore>{};
+                      for (final s in _subjects) {
+                        final c = _parseNonNegativeInt(
+                          _correctControllers[s]?.text,
+                        );
+                        final w = _parseNonNegativeInt(
+                          _wrongControllers[s]?.text,
+                        );
+                        final b = _parseNonNegativeInt(
+                          _blankControllers[s]?.text,
+                        );
+                        scoresMap[s] = SubjectScore(
+                          correct: c,
+                          wrong: w,
+                          blank: b,
+                          net: NetCalculator.calculate(c, w),
+                        );
+                      }
+
+                      final normalizedScore = _totalScoreController.text
+                          .trim()
+                          .replaceAll(',', '.');
+                      final totalScore =
+                          double.tryParse(normalizedScore) ?? 0.0;
+
+                      final success = await ref
+                          .read(examNotifierProvider.notifier)
+                          .addExamResult(
+                            studentId: _selectedStudentId!,
+                            classId: activeClassId,
+                            teacherId: user?.uid ?? '',
+                            examName: _examNameController.text.trim(),
+                            publisher: _publisherController.text.trim().isEmpty
+                                ? null
+                                : _publisherController.text.trim(),
+                            examDate: _examDate,
+                            scores: scoresMap,
+                            totalNet: totalNet,
+                            totalScore: totalScore,
                           );
-                        }
 
-                        final totalScore = double.tryParse(
-                                _totalScoreController.text.trim()) ??
-                            0.0;
-
-                        final success = await ref
-                            .read(examNotifierProvider.notifier)
-                            .addExamResult(
-                              studentId: _selectedStudentId!,
-                              classId: _selectedClassId!,
-                              teacherId: user?.uid ?? '',
-                              examName: _examNameController.text.trim(),
-                              publisher:
-                                  _publisherController.text.trim().isEmpty
-                                      ? null
-                                      : _publisherController.text.trim(),
-                              examDate: _examDate,
-                              scores: scoresMap,
-                              totalNet: totalNet,
-                              totalScore: totalScore,
-                            );
-
-                        if (context.mounted && success) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Sınav sonucu kaydedildi!')),
-                          );
-                          context.pop();
-                        }
+                      if (!context.mounted) return;
+                      if (success) {
+                        context.showSnackBar('Sınav sonucu kaydedildi!');
+                        context.pop();
+                      } else {
+                        context.showSnackBar(
+                          'Sınav sonucu kaydedilemedi. Lütfen tekrar deneyin.',
+                          isError: true,
+                        );
                       }
                     },
                   ),
@@ -415,7 +468,10 @@ class _CreateExamResultScreenState
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, __) => Center(child: Text('Sınıflar yüklenemedi: $err')),
+        error: (_, __) => ErrorState(
+          message: 'Sınıflar yüklenirken bir sorun oluştu.',
+          onRetry: () => ref.invalidate(teacherClassesStreamProvider),
+        ),
       ),
     );
   }

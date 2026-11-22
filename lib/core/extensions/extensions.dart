@@ -68,9 +68,9 @@ extension StringExtensions on String {
         .hasMatch(this);
   }
 
-  /// Davet kodu formatı (OT-8A-XXXXXX)
+  /// Davet kodu formatı (OT-XXXXXX)
   bool get isValidInviteCode {
-    return RegExp(r'^OT-[0-9]{1,2}[A-Z]-[A-Z0-9]{6}$').hasMatch(this);
+    return RegExp(r'^OT-[A-Z0-9]{6}$').hasMatch(trim().toUpperCase());
   }
 
   /// Şifre geçerliliği (min 8 karakter)

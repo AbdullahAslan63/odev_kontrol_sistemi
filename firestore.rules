@@ -20,15 +20,10 @@ service cloud.firestore {
       return userExists() && getUserRole() == 'teacher';
     }
 
-    function isParent() {
-      return userExists() && getUserRole() == 'parent';
-    }
-
     function isOwner(uid) {
       return isAuthenticated() && request.auth.uid == uid;
     }
 
-    // Role yoksa / users doc gecikmeli yazıldıysa bile kendi teacherId verisine erişim
     function ownsTeacherData() {
       return isAuthenticated() && resource.data.teacherId == request.auth.uid;
     }
@@ -37,86 +32,161 @@ service cloud.firestore {
       return isAuthenticated() && request.resource.data.teacherId == request.auth.uid;
     }
 
+    function parentProfileExists() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/parent_profiles/$(request.auth.uid));
+    }
+
+    function parentProfileData() {
+      return get(/databases/$(database)/documents/parent_profiles/$(request.auth.uid)).data;
+    }
+
+    function hasParentStudent(studentId) {
+      return parentProfileExists() &&
+        ('studentIds' in parentProfileData()) &&
+        studentId in parentProfileData().studentIds;
+    }
+
+    function hasParentClass(classId) {
+      return parentProfileExists() &&
+        ('classIds' in parentProfileData()) &&
+        classId in parentProfileData().classIds;
+    }
+
+    function isValidParentLinkUpdate(studentId) {
+      return isAuthenticated() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['parentIds', 'lastInviteCode']) &&
+        request.resource.data.lastInviteCode is string &&
+        exists(/databases/$(database)/documents/invite_codes/$(request.resource.data.lastInviteCode)) &&
+        get(/databases/$(database)/documents/invite_codes/$(request.resource.data.lastInviteCode)).data.studentId == studentId &&
+        get(/databases/$(database)/documents/invite_codes/$(request.resource.data.lastInviteCode)).data.used == false &&
+        getAfter(/databases/$(database)/documents/invite_codes/$(request.resource.data.lastInviteCode)).data.used == true &&
+        getAfter(/databases/$(database)/documents/invite_codes/$(request.resource.data.lastInviteCode)).data.usedBy == request.auth.uid &&
+        request.resource.data.parentIds.hasAll(resource.data.parentIds) &&
+        request.resource.data.parentIds.toSet().difference(resource.data.parentIds.toSet()) == [request.auth.uid].toSet();
+    }
+
+    function isParentSelfUnlink() {
+      return isAuthenticated() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['parentIds']) &&
+        request.auth.uid in resource.data.parentIds &&
+        !(request.auth.uid in request.resource.data.parentIds) &&
+        resource.data.parentIds.hasAll(request.resource.data.parentIds) &&
+        resource.data.parentIds.toSet().difference(request.resource.data.parentIds.toSet()) == [request.auth.uid].toSet();
+    }
+
+    function validParentProfileCreate() {
+      return (
+        request.resource.data.studentIds is list &&
+        request.resource.data.classIds is list &&
+        (
+          (request.resource.data.studentIds.size() == 0 &&
+            request.resource.data.classIds.size() == 0) ||
+          (request.resource.data.lastLinkedStudentId is string &&
+            request.resource.data.studentIds == [request.resource.data.lastLinkedStudentId] &&
+            request.auth.uid in getAfter(/databases/$(database)/documents/students/$(request.resource.data.lastLinkedStudentId)).data.parentIds &&
+            (request.resource.data.classIds.size() == 0 ||
+              request.resource.data.classIds == [getAfter(/databases/$(database)/documents/students/$(request.resource.data.lastLinkedStudentId)).data.classId]))
+        )
+      );
+    }
+
+    function validParentProfileUpdate() {
+      let oldStudents = ('studentIds' in resource.data) ? resource.data.studentIds.toSet() : [].toSet();
+      let newStudents = ('studentIds' in request.resource.data) ? request.resource.data.studentIds.toSet() : [].toSet();
+      let addedStudents = newStudents.difference(oldStudents);
+      let oldClasses = ('classIds' in resource.data) ? resource.data.classIds.toSet() : [].toSet();
+      let newClasses = ('classIds' in request.resource.data) ? request.resource.data.classIds.toSet() : [].toSet();
+      let addedClasses = newClasses.difference(oldClasses);
+
+      return (addedStudents.size() == 0 && addedClasses.size() == 0) ||
+        (request.resource.data.lastLinkedStudentId is string &&
+          addedStudents.hasOnly([request.resource.data.lastLinkedStudentId]) &&
+          request.auth.uid in getAfter(/databases/$(database)/documents/students/$(request.resource.data.lastLinkedStudentId)).data.parentIds &&
+          (addedClasses.size() == 0 ||
+            addedClasses.hasOnly([getAfter(/databases/$(database)/documents/students/$(request.resource.data.lastLinkedStudentId)).data.classId])));
+    }
+
     match /users/{uid} {
-      allow read: if isOwner(uid);
-      allow create: if isOwner(uid);
-      allow update: if isOwner(uid);
-      allow delete: if isOwner(uid);
+      allow read, delete: if isOwner(uid);
+      allow create: if isOwner(uid) && request.resource.data.role in ['teacher', 'parent'];
+      allow update: if isOwner(uid) && request.resource.data.role == resource.data.role;
     }
 
     match /teacher_profiles/{uid} {
-      allow read: if isOwner(uid);
-      allow write: if isOwner(uid);
+      allow read, write: if isOwner(uid);
     }
 
     match /parent_profiles/{uid} {
-      allow read: if isOwner(uid);
-      allow write: if isOwner(uid);
+      allow read, delete: if isOwner(uid);
+      allow create: if isOwner(uid) && validParentProfileCreate();
+      allow update: if isOwner(uid) && validParentProfileUpdate();
+    }
+
+    match /invite_codes/{code} {
+      allow get: if true;
+      allow list: if isAuthenticated() && resource.data.teacherId == request.auth.uid;
+      allow create: if createsAsSelfTeacher();
+      allow update: if isAuthenticated() &&
+        resource.data.used == false &&
+        request.resource.data.used == true &&
+        request.resource.data.usedBy == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used', 'usedBy', 'usedAt']);
+      allow delete: if ownsTeacherData();
     }
 
     match /classes/{classId} {
-      allow read: if isAuthenticated() &&
-        (resource.data.teacherId == request.auth.uid || isParent());
-      allow create: if isAuthenticated() && createsAsSelfTeacher();
+      allow read: if ownsTeacherData() || hasParentClass(classId);
+      allow create: if createsAsSelfTeacher();
       allow update, delete: if ownsTeacherData();
     }
 
     match /students/{studentId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && createsAsSelfTeacher();
-      allow update: if ownsTeacherData() ||
-        (isAuthenticated() &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['parentIds']));
+      allow read: if ownsTeacherData() || (isAuthenticated() && request.auth.uid in resource.data.parentIds);
+      allow create: if createsAsSelfTeacher();
+      allow update: if ownsTeacherData() || isValidParentLinkUpdate(studentId) || isParentSelfUnlink();
       allow delete: if ownsTeacherData();
     }
 
-    match /invite_codes/{code} {
-      allow read: if true;
-      allow create: if isAuthenticated();
-      allow update: if true;
-    }
-
-    // Ödevler — teacherId eşleşmesi (role get() bağımlılığı kaldırıldı)
     match /homeworks/{homeworkId} {
-      allow read: if ownsTeacherData() || isParent();
+      allow read: if ownsTeacherData() || hasParentClass(resource.data.classId);
       allow create: if createsAsSelfTeacher();
       allow update, delete: if ownsTeacherData();
     }
 
     match /homework_assignments/{assignmentId} {
-      allow read: if ownsTeacherData() || isParent();
+      allow read: if ownsTeacherData() || hasParentStudent(resource.data.studentId);
       allow create: if createsAsSelfTeacher();
       allow update, delete: if ownsTeacherData();
     }
 
     match /exam_results/{examId} {
-      allow read: if ownsTeacherData() || isParent();
+      allow read: if ownsTeacherData() || hasParentStudent(resource.data.studentId);
       allow create: if createsAsSelfTeacher();
       allow update, delete: if ownsTeacherData();
     }
 
     match /subject_progress/{progressId} {
-      allow read: if ownsTeacherData() || isParent();
+      allow read: if ownsTeacherData() || hasParentStudent(resource.data.studentId);
       allow create: if createsAsSelfTeacher();
       allow update, delete: if ownsTeacherData();
     }
 
     match /goals/{goalId} {
-      allow read: if ownsTeacherData() || isParent();
+      allow read: if ownsTeacherData() || hasParentStudent(resource.data.studentId);
       allow create: if createsAsSelfTeacher();
       allow update, delete: if ownsTeacherData();
     }
 
     match /messages/{messageId} {
-      allow read: if ownsTeacherData() ||
-        (isParent() && request.auth.uid in resource.data.parentIds);
+      allow read: if ownsTeacherData() || (isAuthenticated() && request.auth.uid in resource.data.parentIds);
       allow create: if createsAsSelfTeacher();
-      allow update: if ownsTeacherData();
+      allow update, delete: if ownsTeacherData();
     }
 
     match /notifications/{notificationId} {
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      allow create: if isAuthenticated();
+      allow read, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isTeacher() && request.resource.data.teacherId == request.auth.uid;
       allow update: if isAuthenticated() &&
         resource.data.userId == request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);

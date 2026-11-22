@@ -1,6 +1,7 @@
 # Android Release Keystore Yapılandırma Örneği
-# Bu dosyayı 'key.properties' olarak kopyalayın ve şifreleri doldurun:
+# Bu dosyayı 'android/key.properties' olarak kopyalayın ve şifreleri doldurun:
 # keytool -genkey -v -keystore android/upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+# Not: storeFile yolu android/app/ dizinine göre çözümlenir (../upload-keystore.jks -> android/upload-keystore.jks).
 
 storePassword=ORNEK_STORE_SIFRESI
 keyPassword=ORNEK_KEY_SIFRESI

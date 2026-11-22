@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../providers/auth_providers.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/theme/app_sizes.dart';
+import '../../../../core/constants/app_constants.dart';
 import '../../../../core/constants/app_strings.dart';
+import '../../../../core/extensions/extensions.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_sizes.dart';
+import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/utils/url_utils.dart';
 import '../../../../core/widgets/app_buttons.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../../../core/widgets/step_progress_indicator.dart';
-import '../../../../core/extensions/extensions.dart';
-import '../../../../core/services/sms_service.dart';
+import '../providers/auth_providers.dart';
 
-/// Parolasız Veli Kayıt & Giriş Ekranı — 3 Adımlı Şifresiz Wizard Yapısı
-/// 1. Davet Kodu -> 2. Telefon Numarası -> 3. SMS Doğrulama Kodu -> Sonsuza Kadar Açık Giriş
+/// Veli Kayıt Ekranı — 3 Adımlı Wizard (Davet Kodu → Kişisel Bilgiler → Şifre & Onay)
 class ParentRegisterScreen extends ConsumerStatefulWidget {
   const ParentRegisterScreen({super.key});
 
@@ -28,30 +28,31 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
   // Step 0: Davet Kodu
   final _codeController = TextEditingController();
 
-  // Step 1: Ad Soyad & Telefon Numarası (Şifre Alanı YOKTUR!)
+  // Step 1: Ad Soyad & E-posta
   final _step1FormKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _phoneController = TextEditingController(text: '0531 563 5049');
+  final _emailController = TextEditingController();
 
-  // Step 2: SMS Doğrulama Kodu
+  // Step 2: Şifre & Koşullar
   final _step2FormKey = GlobalKey<FormState>();
-  final _otpController = TextEditingController();
-  bool _termsAccepted = true;
-  bool _isSendingSms = false;
+  final _passwordController = TextEditingController();
+  final _passwordConfirmController = TextEditingController();
+  bool _termsAccepted = false;
 
   String? _validatedCode;
   String? _studentName;
+  String? _className;
 
   @override
   void dispose() {
     _codeController.dispose();
     _nameController.dispose();
-    _phoneController.dispose();
-    _otpController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _passwordConfirmController.dispose();
     super.dispose();
   }
 
-  // ── Adım 1: Davet Kodu Doğrulama ─────────────────────────────────────────
   Future<void> _validateCode() async {
     context.unfocus();
     final code = _codeController.text.trim().toUpperCase();
@@ -68,30 +69,21 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
       _validatedCode = code;
       final data = notifier.inviteCodeData;
       _studentName = data?['studentName'] as String?;
+      _className = data?['className'] as String?;
       setState(() => _currentStep = 1);
     } else {
       final error = ref.read(parentAuthProvider).errorMessage;
-      if (error != null) context.showSnackBar(error, isError: true);
+      if (error != null) {
+        context.showSnackBar(error, isError: true);
+        notifier.clearError();
+      }
     }
   }
 
-  // ── Adım 2: Telefon Numarasına SMS Gönderme ─────────────────────────────
-  Future<void> _sendSmsOtp() async {
+  void _nextFromStep1() {
     context.unfocus();
     if (!_step1FormKey.currentState!.validate()) return;
-
-    setState(() => _isSendingSms = true);
-    final phone = _phoneController.text.trim();
-    final res = await SmsService.sendOtp(phone);
-    if (!mounted) return;
-    setState(() => _isSendingSms = false);
-
-    if (res['success'] == true) {
-      context.showSnackBar(res['message'] ?? 'SMS doğrulama kodu gönderildi.');
-      setState(() => _currentStep = 2);
-    } else {
-      context.showSnackBar(res['message'] ?? 'SMS gönderilemedi.', isError: true);
-    }
+    setState(() => _currentStep = 2);
   }
 
   void _prevStep() {
@@ -103,8 +95,7 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
     }
   }
 
-  // ── Adım 3: SMS Kodunu Doğrula ve Şifresiz Kalıcı Giriş Yap ─────────────
-  Future<void> _verifyAndRegister() async {
+  Future<void> _submitRegistration() async {
     context.unfocus();
     if (!_step2FormKey.currentState!.validate()) return;
     if (!_termsAccepted) {
@@ -112,35 +103,21 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
       return;
     }
 
-    final phone = _phoneController.text.trim();
-    final otpCode = _otpController.text.trim();
-
-    final isValidOtp = await SmsService.verifyOtp(phone, otpCode);
-    if (!mounted) return;
-
-    if (!isValidOtp) {
-      context.showSnackBar('Doğrulama kodu hatalı veya süresi dolmuş.', isError: true);
-      return;
-    }
-
-    // Şifresiz arka plan hesabı: Telefon bazlı gizli hash şifre
-    final autoEmail = 'parent_${phone.replaceAll(RegExp(r'\D'), '')}@matpusula.app';
-    final autoPassword = 'MatPusula_Passless_${phone.replaceAll(RegExp(r'\D'), '')}';
-
     await ref.read(parentAuthProvider.notifier).registerParent(
           name: _nameController.text.trim(),
-          email: autoEmail,
-          password: autoPassword,
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
           inviteCode: _validatedCode!,
         );
 
     if (!mounted) return;
     final state = ref.read(parentAuthProvider);
     if (state.isSuccess) {
-      context.showSnackBar('✅ Başarıyla doğrulandı! Çıkış yapana kadar hesabınız açık kalacaktır.');
+      context.showSnackBar('Veli kaydınız tamamlandı.');
       context.go('/parent/home');
     } else if (state.errorMessage != null) {
       context.showSnackBar(state.errorMessage!, isError: true);
+      ref.read(parentAuthProvider.notifier).clearError();
     }
   }
 
@@ -152,11 +129,12 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: AppColors.textPrimary),
+          icon: const Icon(Icons.arrow_back_rounded,
+              color: AppColors.textPrimary),
           onPressed: _prevStep,
         ),
         title: Text(
-          'Veli Telefon Kaydı',
+          'Veli Kaydı',
           style: AppTextStyles.h4.copyWith(color: AppColors.textPrimary),
         ),
         centerTitle: true,
@@ -167,27 +145,22 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── İlerleme Adımları ─────────────────────────────────────────
               StepProgressIndicator(
                 currentStep: _currentStep,
                 totalSteps: 3,
                 stepTitles: const [
                   'Davet Kodu',
-                  'Telefon Numarası',
-                  'SMS Doğrulama'
+                  'Kişisel Bilgiler',
+                  'Güvenlik & Onay',
                 ],
                 primaryColor: AppColors.parentPrimary,
               ),
               const SizedBox(height: 28),
-
-              // ── Adım İçeriği ─────────────────────────────────────────────
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 300),
                 child: _buildStepContent(),
               ),
-
               const SizedBox(height: 32),
-
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -195,7 +168,7 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
                   TextButton(
                     onPressed: () => context.push('/login'),
                     child: Text(
-                      'Direkt Giriş Yap',
+                      AppStrings.login,
                       style: AppTextStyles.labelLarge.copyWith(
                         color: AppColors.parentPrimary,
                       ),
@@ -234,17 +207,19 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
         Text('1. Öğrenci Davet Kodu', style: AppTextStyles.h3),
         const SizedBox(height: 6),
         Text(
-          'Öğretmeninizden aldığınız 6 haneli davet kodunu (ör: OT-123456) girin.',
+          'Öğretmeninizden aldığınız 6 haneli davet kodunu (${AppStrings.inviteCodeHint}) girin.',
           style: AppTextStyles.bodyMedium,
         ),
         const SizedBox(height: 24),
         AppTextField(
           label: AppStrings.inviteCode,
-          hint: 'OT-XXXXXX',
+          hint: 'OT-A7K9M2',
           controller: _codeController,
-          prefixIcon: const Icon(Icons.qr_code_rounded, color: AppColors.textSecondary),
+          prefixIcon:
+              const Icon(Icons.qr_code_rounded, color: AppColors.textSecondary),
           textCapitalization: TextCapitalization.characters,
           textInputAction: TextInputAction.done,
+          onFieldSubmitted: (_) => _validateCode(),
         ),
         const SizedBox(height: 28),
         PrimaryButton(
@@ -257,7 +232,7 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
     );
   }
 
-  // ── Adım 2: Ad Soyad & Telefon Numarası ────────────────────────────────────
+  // ── Adım 2: Ad Soyad & E-posta ───────────────────────────────────────────
   Widget _buildStep1() {
     return Form(
       key: _step1FormKey,
@@ -265,13 +240,15 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
         key: const ValueKey(1),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_studentName != null) ...[
+          if (_studentName != null && _studentName!.isNotEmpty) ...[
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: AppColors.parentSurface,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.parentPrimary.withValues(alpha: 0.3)),
+                border: Border.all(
+                  color: AppColors.parentPrimary.withValues(alpha: 0.3),
+                ),
               ),
               child: Row(
                 children: [
@@ -282,7 +259,11 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
                       color: AppColors.parentPrimary,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.child_care_rounded, color: Colors.white, size: 24),
+                    child: const Icon(
+                      Icons.face_rounded,
+                      color: Colors.white,
+                      size: 24,
+                    ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -296,21 +277,29 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        Text(_studentName!, style: AppTextStyles.h4),
+                        Text(
+                          _className != null && _className!.isNotEmpty
+                              ? '$_studentName ($_className)'
+                              : _studentName!,
+                          style: AppTextStyles.h4,
+                        ),
                       ],
                     ),
                   ),
-                  const Icon(Icons.check_circle_rounded, color: AppColors.parentPrimary, size: 24),
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    color: AppColors.parentPrimary,
+                    size: 24,
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 24),
           ],
-
-          Text('2. Veli Bilgileri & Telefon', style: AppTextStyles.h3),
+          Text('2. Veli Bilgileri', style: AppTextStyles.h3),
           const SizedBox(height: 6),
           Text(
-            'Şifre gerekmez. Telefon numaranıza SMS kodu gönderilecektir.',
+            'Hesabınız için ad soyad ve e-posta adresinizi girin.',
             style: AppTextStyles.bodyMedium,
           ),
           const SizedBox(height: 24),
@@ -318,24 +307,38 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
             label: AppStrings.fullName,
             hint: 'Ad Soyad',
             controller: _nameController,
-            prefixIcon: const Icon(Icons.person_outline_rounded, color: AppColors.textSecondary),
+            prefixIcon: const Icon(
+              Icons.person_outline_rounded,
+              color: AppColors.textSecondary,
+            ),
             textCapitalization: TextCapitalization.words,
             textInputAction: TextInputAction.next,
             validator: (v) {
-              if (v == null || v.trim().isEmpty) return AppStrings.errorNameRequired;
+              if (v == null || v.trim().isEmpty) {
+                return AppStrings.errorNameRequired;
+              }
               return null;
             },
           ),
           const SizedBox(height: AppSizes.itemSpacing),
           AppTextField(
-            label: 'Telefon Numarası',
-            hint: '0531 563 5049',
-            controller: _phoneController,
-            prefixIcon: const Icon(Icons.phone_android_rounded, color: AppColors.textSecondary),
-            keyboardType: TextInputType.phone,
+            label: AppStrings.email,
+            hint: 'veli@eposta.com',
+            controller: _emailController,
+            prefixIcon: const Icon(
+              Icons.email_outlined,
+              color: AppColors.textSecondary,
+            ),
+            keyboardType: TextInputType.emailAddress,
             textInputAction: TextInputAction.done,
+            onFieldSubmitted: (_) => _nextFromStep1(),
             validator: (v) {
-              if (v == null || v.trim().length < 10) return 'Geçerli bir telefon numarası giriniz.';
+              if (v == null || v.trim().isEmpty) {
+                return AppStrings.errorEmailRequired;
+              }
+              if (!v.trim().isValidEmail) {
+                return AppStrings.errorEmailInvalid;
+              }
               return null;
             },
           ),
@@ -352,9 +355,8 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
               Expanded(
                 flex: 2,
                 child: PrimaryButton(
-                  label: 'SMS Kodu Gönder 📩',
-                  onPressed: _sendSmsOtp,
-                  isLoading: _isSendingSms,
+                  label: 'Devam Et ➔',
+                  onPressed: _nextFromStep1,
                   backgroundColor: AppColors.parentPrimary,
                 ),
               ),
@@ -365,7 +367,7 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
     );
   }
 
-  // ── Adım 3: SMS Kodu Doğrulama & Şifresiz Kalıcı Giriş ────────────────────
+  // ── Adım 3: Şifre & Onay ─────────────────────────────────────────────────
   Widget _buildStep2() {
     final authState = ref.watch(parentAuthProvider);
 
@@ -375,58 +377,93 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
         key: const ValueKey(2),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('3. SMS Doğrulama Kodu', style: AppTextStyles.h3),
+          Text('3. Güvenlik & Şifre', style: AppTextStyles.h3),
           const SizedBox(height: 6),
           Text(
-            '${_phoneController.text} numarasına gönderilen 6 haneli doğrulama kodunu girin.',
+            'Hesabınız için en az 8 karakterli bir şifre belirleyin.',
             style: AppTextStyles.bodyMedium,
           ),
           const SizedBox(height: 24),
           AppTextField(
-            label: 'SMS Kodu',
-            hint: '123456',
-            controller: _otpController,
-            prefixIcon: const Icon(Icons.mark_chat_unread_rounded, color: AppColors.textSecondary),
-            keyboardType: TextInputType.number,
-            textInputAction: TextInputAction.done,
+            label: AppStrings.password,
+            hint: 'En az 8 karakter',
+            controller: _passwordController,
+            isPassword: true,
+            prefixIcon: const Icon(
+              Icons.lock_outline_rounded,
+              color: AppColors.textSecondary,
+            ),
+            textInputAction: TextInputAction.next,
             validator: (v) {
-              if (v == null || v.trim().length < 6) return '6 haneli doğrulama kodunu giriniz.';
+              if (v == null || v.isEmpty) {
+                return AppStrings.errorPasswordRequired;
+              }
+              if (!v.isValidPassword) {
+                return AppStrings.errorPasswordMin;
+              }
               return null;
             },
           ),
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppColors.parentSurface,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.parentPrimary.withValues(alpha: 0.3)),
+          const SizedBox(height: AppSizes.itemSpacing),
+          AppTextField(
+            label: AppStrings.passwordConfirm,
+            hint: 'Şifrenizi tekrar girin',
+            controller: _passwordConfirmController,
+            isPassword: true,
+            prefixIcon: const Icon(
+              Icons.lock_outline_rounded,
+              color: AppColors.textSecondary,
             ),
-            child: const Row(
-              children: [
-                Icon(Icons.info_outline_rounded, size: 18, color: AppColors.parentPrimary),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Test Modu: Tüm telefon numaraları için sabit doğrulama kodu: 123456',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.parentPrimary),
-                  ),
-                ),
-              ],
-            ),
+            textInputAction: TextInputAction.done,
+            validator: (v) {
+              if (v != _passwordController.text) {
+                return AppStrings.errorPasswordMatch;
+              }
+              return null;
+            },
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           Row(
             children: [
               Checkbox(
                 value: _termsAccepted,
-                onChanged: (v) => setState(() => _termsAccepted = v ?? true),
+                onChanged: (v) => setState(() => _termsAccepted = v ?? false),
                 activeColor: AppColors.parentPrimary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4),
+                ),
               ),
-              const Expanded(
-                child: Text(
-                  'Kullanım şartlarını ve KVKK gizlilik politikalarını onaylıyorum.',
-                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              Expanded(
+                child: Wrap(
+                  children: [
+                    Text(
+                      'Okudum, kabul ediyorum: ',
+                      style: AppTextStyles.bodySmall,
+                    ),
+                    GestureDetector(
+                      onTap: () =>
+                          UrlUtils.openUrl(context, AppConstants.termsUrl),
+                      child: Text(
+                        AppStrings.termsOfService,
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.parentPrimary,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                    Text(' ve ', style: AppTextStyles.bodySmall),
+                    GestureDetector(
+                      onTap: () => UrlUtils.openUrl(
+                          context, AppConstants.privacyPolicyUrl),
+                      child: Text(
+                        AppStrings.privacyPolicy,
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.parentPrimary,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -444,8 +481,8 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
               Expanded(
                 flex: 2,
                 child: PrimaryButton(
-                  label: 'Doğrula & Giriş Yap 🚀',
-                  onPressed: _verifyAndRegister,
+                  label: 'Kaydı Tamamla',
+                  onPressed: _submitRegistration,
                   isLoading: authState.isLoading,
                   backgroundColor: AppColors.parentPrimary,
                 ),

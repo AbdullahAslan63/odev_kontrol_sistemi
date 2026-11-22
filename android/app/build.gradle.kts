@@ -16,7 +16,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.odevtakip.odev_takip"
+    namespace = "com.eduly.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -30,9 +30,9 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.odevtakip.odev_takip"
+        applicationId = "com.eduly.app"
         minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = maxOf(flutter.targetSdkVersion, 35)
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
@@ -48,8 +48,16 @@ android {
 
     buildTypes {
         release {
+            val isReleaseBuildTask = gradle.startParameter.taskNames.any {
+                it.contains("Release", ignoreCase = true) ||
+                    it.contains("bundle", ignoreCase = true)
+            }
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
+            } else if (isReleaseBuildTask) {
+                throw org.gradle.api.GradleException(
+                    "Release derlemesi için android/key.properties ve upload-keystore.jks dosyası gereklidir."
+                )
             } else {
                 signingConfig = signingConfigs.getByName("debug")
             }

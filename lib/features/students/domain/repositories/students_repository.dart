@@ -3,7 +3,10 @@ import '../../data/models/invite_code_model.dart';
 
 abstract class StudentsRepository {
   /// Sınıftaki öğrencilerin canlı akışı
-  Stream<List<StudentEntity>> getClassStudents(String classId, {required String teacherId});
+  Stream<List<StudentEntity>> getClassStudents(
+    String classId, {
+    required String teacherId,
+  });
 
   /// Tek bir öğrenci detay akışı
   Stream<StudentEntity?> getStudentStream(String studentId);
@@ -24,8 +27,14 @@ abstract class StudentsRepository {
   Future<InviteCodeModel> generateInviteCode({
     required String studentId,
     required String teacherId,
+    String? studentName,
+    String? classId,
+    String? className,
   });
 
   /// Öğrenciye ait aktif davet kodunu getirme
-  Future<InviteCodeModel?> getActiveInviteCode(String studentId);
+  Future<InviteCodeModel?> getActiveInviteCode(
+    String studentId, {
+    required String teacherId,
+  });
 }

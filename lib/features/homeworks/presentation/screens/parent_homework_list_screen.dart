@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/theme/app_sizes.dart';
-import '../../../../core/widgets/app_widgets.dart';
-import '../../../../core/utils/app_utils.dart';
 import '../../../../core/extensions/extensions.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_sizes.dart';
+import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/utils/app_utils.dart';
+import '../../../../core/widgets/app_widgets.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
-import '../providers/homework_providers.dart';
-import '../../domain/entities/homework_entity.dart';
-import '../../domain/entities/homework_assignment_entity.dart';
 import '../../../students/presentation/providers/student_providers.dart';
+import '../../../students/presentation/widgets/parent_child_selector.dart';
+import '../../domain/entities/homework_assignment_entity.dart';
+import '../../domain/entities/homework_entity.dart';
+import '../providers/homework_providers.dart';
 
 class ParentHomeworkListScreen extends ConsumerWidget {
   const ParentHomeworkListScreen({super.key});
@@ -28,8 +29,9 @@ class ParentHomeworkListScreen extends ConsumerWidget {
       ),
       body: studentsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(
-          child: Text('Öğrenci bilgisi yüklenemedi.\n$err', textAlign: TextAlign.center),
+        error: (_, __) => ErrorState(
+          message: 'Öğrenci bilgisi şu anda yüklenemedi.',
+          onRetry: () => ref.invalidate(parentStudentsStreamProvider(parentUid)),
         ),
         data: (students) {
           if (students.isEmpty) {
@@ -41,35 +43,58 @@ class ParentHomeworkListScreen extends ConsumerWidget {
             );
           }
 
-          final studentId = students.first.id;
+          final activeStudent = resolveSelectedParentStudent(ref, students);
           final assignmentsAsync =
-              ref.watch(studentAssignmentsStreamProvider(studentId));
+              ref.watch(studentAssignmentsStreamProvider(activeStudent.id));
 
-          return assignmentsAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, _) => Center(
-              child: Text('Ödevler yüklenemedi.\n$err', textAlign: TextAlign.center),
-            ),
-            data: (assignments) {
-              if (assignments.isEmpty) {
-                return const EmptyState(
-                  title: 'Henüz Ödev Yok',
-                  subtitle:
-                      'Öğretmen ödev tanımladığında çocuğunuza ait ödevler burada listelenir.',
-                );
-              }
+          return Column(
+            children: [
+              if (students.length > 1)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSizes.pagePadding,
+                    AppSizes.pagePadding,
+                    AppSizes.pagePadding,
+                    0,
+                  ),
+                  child: ParentChildSelectorBar(
+                    students: students,
+                    activeStudent: activeStudent,
+                  ),
+                ),
+              Expanded(
+                child: assignmentsAsync.when(
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (_, __) => ErrorState(
+                    message: 'Ödevler yüklenirken bir sorun oluştu.',
+                    onRetry: () => ref.invalidate(
+                      studentAssignmentsStreamProvider(activeStudent.id),
+                    ),
+                  ),
+                  data: (assignments) {
+                    if (assignments.isEmpty) {
+                      return const EmptyState(
+                        title: 'Henüz Ödev Yok',
+                        subtitle:
+                            'Öğretmen ödev tanımladığında çocuğunuza ait ödevler burada listelenir.',
+                      );
+                    }
 
-              return ListView.separated(
-                padding: const EdgeInsets.all(AppSizes.pagePadding),
-                itemCount: assignments.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  return _ParentHomeworkAssignmentCard(
-                    assignment: assignments[index],
-                  );
-                },
-              );
-            },
+                    return ListView.separated(
+                      padding: const EdgeInsets.all(AppSizes.pagePadding),
+                      itemCount: assignments.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        return _ParentHomeworkAssignmentCard(
+                          assignment: assignments[index],
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
           );
         },
       ),
@@ -153,8 +178,11 @@ class _ParentHomeworkAssignmentCard extends ConsumerWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              const Icon(Icons.calendar_today_rounded,
-                  size: 14, color: AppColors.textSecondary),
+              const Icon(
+                Icons.calendar_today_rounded,
+                size: 14,
+                color: AppColors.textSecondary,
+              ),
               const SizedBox(width: 6),
               Text(
                 'Son Teslim: ${homework.dueDate.toTurkishDate()}',
@@ -178,8 +206,11 @@ class _ParentHomeworkAssignmentCard extends ConsumerWidget {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.info_outline_rounded,
-                      size: 16, color: AppColors.parentPrimary),
+                  const Icon(
+                    Icons.info_outline_rounded,
+                    size: 16,
+                    color: AppColors.parentPrimary,
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(

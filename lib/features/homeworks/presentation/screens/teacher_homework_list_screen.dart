@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/theme/app_sizes.dart';
-import '../../../../core/widgets/app_widgets.dart';
 import '../../../../core/extensions/extensions.dart';
-import '../providers/homework_providers.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_sizes.dart';
+import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/app_widgets.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../domain/entities/homework_entity.dart';
+import '../providers/homework_providers.dart';
 
 class TeacherHomeworkListScreen extends ConsumerStatefulWidget {
   const TeacherHomeworkListScreen({super.key});
@@ -33,6 +34,7 @@ class _TeacherHomeworkListScreenState
   @override
   Widget build(BuildContext context) {
     final homeworksAsync = ref.watch(teacherHomeworksStreamProvider);
+    final teacherId = ref.watch(currentUserProvider)?.uid ?? '';
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -48,7 +50,6 @@ class _TeacherHomeworkListScreenState
       ),
       body: Column(
         children: [
-          // ── Ders Seçim Filtresi ──────────────────────────────────────────
           SizedBox(
             height: 52,
             child: ListView.separated(
@@ -65,7 +66,8 @@ class _TeacherHomeworkListScreenState
                   selectedColor: AppColors.teacherPrimary,
                   labelStyle: TextStyle(
                     color: isSelected ? Colors.white : AppColors.textPrimary,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    fontWeight:
+                        isSelected ? FontWeight.bold : FontWeight.normal,
                   ),
                   onSelected: (selected) {
                     if (selected) setState(() => _selectedSubject = subject);
@@ -74,8 +76,6 @@ class _TeacherHomeworkListScreenState
               },
             ),
           ),
-
-          // ── Ödev Listesi ──────────────────────────────────────────────────
           Expanded(
             child: homeworksAsync.when(
               data: (homeworks) {
@@ -107,15 +107,16 @@ class _TeacherHomeworkListScreenState
                       homework: homework,
                       onTap: () =>
                           context.push('/teacher/homeworks/${homework.id}'),
-                      onDelete: () => _confirmDeleteHomework(context, homework),
+                      onDelete: () =>
+                          _confirmDeleteHomework(context, homework, teacherId),
                     );
                   },
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, stack) => Center(
-                child: Text('Ödevler yüklenemedi: $err',
-                    style: const TextStyle(color: AppColors.error)),
+              error: (_, __) => ErrorState(
+                message: 'Ödevler yüklenirken bir sorun oluştu.',
+                onRetry: () => ref.invalidate(teacherHomeworksStreamProvider),
               ),
             ),
           ),
@@ -130,8 +131,12 @@ class _TeacherHomeworkListScreenState
     );
   }
 
-  void _confirmDeleteHomework(BuildContext context, HomeworkEntity homework) {
-    showDialog(
+  void _confirmDeleteHomework(
+    BuildContext context,
+    HomeworkEntity homework,
+    String teacherId,
+  ) {
+    showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('${homework.title} Silinsin mi?'),
@@ -146,9 +151,21 @@ class _TeacherHomeworkListScreenState
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              await ref
+              final ok = await ref
                   .read(homeworkNotifierProvider.notifier)
-                  .deleteHomework(homework.id);
+                  .deleteHomework(
+                    homework.id,
+                    teacherId: teacherId.isNotEmpty ? teacherId : homework.teacherId,
+                  );
+              if (!context.mounted) return;
+              if (ok) {
+                context.showSnackBar('Ödev silindi.');
+              } else {
+                context.showSnackBar(
+                  'Ödev silinemedi. Lütfen tekrar deneyin.',
+                  isError: true,
+                );
+              }
             },
             style: TextButton.styleFrom(foregroundColor: AppColors.error),
             child: const Text('Sil'),
@@ -211,15 +228,17 @@ class _TeacherHomeworkCard extends StatelessWidget {
                       color: homework.isOverdue
                           ? AppColors.error
                           : AppColors.textSecondary,
-                      fontWeight:
-                          homework.isOverdue ? FontWeight.bold : FontWeight.normal,
+                      fontWeight: homework.isOverdue
+                          ? FontWeight.bold
+                          : FontWeight.normal,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 10),
               Text(homework.title, style: AppTextStyles.h4),
-              if (homework.sourceName != null || homework.questionRange != null) ...[
+              if (homework.sourceName != null ||
+                  homework.questionRange != null) ...[
                 const SizedBox(height: 4),
                 Text(
                   '${homework.sourceName ?? ''} ${homework.questionRange != null ? "• Soru: ${homework.questionRange}" : ""}',
@@ -233,14 +252,20 @@ class _TeacherHomeworkCard extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Kontrol Et & Durum Güncelle',
-                      style: TextStyle(
-                          fontSize: 13,
-                          color: AppColors.teacherPrimary,
-                          fontWeight: FontWeight.w600)),
+                  const Text(
+                    'Kontrol Et & Durum Güncelle',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.teacherPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   IconButton(
-                    icon: const Icon(Icons.delete_outline_rounded,
-                        size: 20, color: AppColors.error),
+                    icon: const Icon(
+                      Icons.delete_outline_rounded,
+                      size: 20,
+                      color: AppColors.error,
+                    ),
                     onPressed: onDelete,
                   ),
                 ],

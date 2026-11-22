@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../../core/constants/app_constants.dart';
 import '../models/student_model.dart';
 import '../models/invite_code_model.dart';
 import '../../domain/entities/student_entity.dart';
@@ -19,20 +20,19 @@ class StudentsRepositoryImpl implements StudentsRepository {
       _firestore.collection('invite_codes');
 
   @override
-  Stream<List<StudentEntity>> getClassStudents(String classId, {required String teacherId}) {
-    if (classId.isEmpty) return Stream.value([]);
+  Stream<List<StudentEntity>> getClassStudents(
+    String classId, {
+    required String teacherId,
+  }) {
+    if (classId.isEmpty || teacherId.isEmpty) return Stream.value([]);
 
-    Query<Map<String, dynamic>> query = _studentsRef.where('classId', isEqualTo: classId);
-    if (teacherId.isNotEmpty) {
-      query = query.where('teacherId', isEqualTo: teacherId);
-    }
-
-    return query
+    return _studentsRef
+        .where('classId', isEqualTo: classId)
+        .where('teacherId', isEqualTo: teacherId)
         .snapshots()
         .map((snapshot) {
-      final list = snapshot.docs
-          .map((doc) => StudentModel.fromFirestore(doc))
-          .toList();
+      final list =
+          snapshot.docs.map((doc) => StudentModel.fromFirestore(doc)).toList();
       list.sort((a, b) => a.name.compareTo(b.name));
       return list;
     }).handleError((_) => <StudentEntity>[]);
@@ -57,11 +57,10 @@ class StudentsRepositoryImpl implements StudentsRepository {
       await for (final snapshot in _studentsRef
           .where('parentIds', arrayContains: parentUid)
           .snapshots()) {
-        yield snapshot.docs
-            .map((doc) => StudentModel.fromFirestore(doc))
-            // Eski demo kayıtlarını (Mustafa / teacher_demo) gösterme
-            .where((s) => s.teacherId != 'teacher_demo')
-            .toList();
+        final list =
+            snapshot.docs.map((doc) => StudentModel.fromFirestore(doc)).toList();
+        list.sort((a, b) => a.name.compareTo(b.name));
+        yield list;
       }
     } catch (_) {
       yield const [];
@@ -73,6 +72,7 @@ class StudentsRepositoryImpl implements StudentsRepository {
     final model = StudentModel(
       id: '',
       classId: student.classId,
+      className: student.className,
       teacherId: student.teacherId,
       name: student.name,
       schoolNumber: student.schoolNumber,
@@ -85,10 +85,11 @@ class StudentsRepositoryImpl implements StudentsRepository {
 
     final docRef = await _studentsRef.add(model.toFirestore());
 
-    // Sınıfın öğrenci sayısını artır
-    await _classesRef.doc(student.classId).update({
-      'studentCount': FieldValue.increment(1),
-    });
+    try {
+      await _classesRef.doc(student.classId).update({
+        'studentCount': FieldValue.increment(1),
+      });
+    } catch (_) {}
 
     return docRef.id;
   }
@@ -98,6 +99,7 @@ class StudentsRepositoryImpl implements StudentsRepository {
     final model = StudentModel(
       id: student.id,
       classId: student.classId,
+      className: student.className,
       teacherId: student.teacherId,
       name: student.name,
       schoolNumber: student.schoolNumber,
@@ -115,26 +117,43 @@ class StudentsRepositoryImpl implements StudentsRepository {
   Future<void> deleteStudent(String studentId, String classId) async {
     await _studentsRef.doc(studentId).delete();
 
-    // Sınıfın öğrenci sayısını azalt
-    await _classesRef.doc(classId).update({
-      'studentCount': FieldValue.increment(-1),
-    });
+    if (classId.isNotEmpty) {
+      try {
+        await _classesRef.doc(classId).update({
+          'studentCount': FieldValue.increment(-1),
+        });
+      } catch (_) {}
+    }
   }
 
   @override
   Future<InviteCodeModel> generateInviteCode({
     required String studentId,
     required String teacherId,
+    String? studentName,
+    String? classId,
+    String? className,
   }) async {
-    final code = _generateRandomCode();
-    final expiresAt = DateTime.now().add(const Duration(days: 14));
+    var code = _generateRandomCode();
+    for (var attempt = 0; attempt < 5; attempt++) {
+      final existing = await _inviteCodesRef.doc(code).get();
+      if (!existing.exists) break;
+      code = _generateRandomCode();
+    }
+
+    final now = DateTime.now();
+    final expiresAt =
+        now.add(const Duration(days: AppConstants.inviteCodeExpiryDays));
 
     final inviteModel = InviteCodeModel(
       code: code,
       studentId: studentId,
       teacherId: teacherId,
+      studentName: studentName,
+      classId: classId,
+      className: className,
       expiresAt: expiresAt,
-      createdAt: DateTime.now(),
+      createdAt: now,
     );
 
     await _inviteCodesRef.doc(code).set(inviteModel.toFirestore());
@@ -142,15 +161,21 @@ class StudentsRepositoryImpl implements StudentsRepository {
   }
 
   @override
-  Future<InviteCodeModel?> getActiveInviteCode(String studentId) async {
+  Future<InviteCodeModel?> getActiveInviteCode(
+    String studentId, {
+    required String teacherId,
+  }) async {
+    if (studentId.isEmpty || teacherId.isEmpty) return null;
     try {
       final query = await _inviteCodesRef
           .where('studentId', isEqualTo: studentId)
+          .where('teacherId', isEqualTo: teacherId)
           .where('used', isEqualTo: false)
           .get();
 
       if (query.docs.isEmpty) return null;
-      final list = query.docs.map((d) => InviteCodeModel.fromFirestore(d)).toList();
+      final list =
+          query.docs.map((d) => InviteCodeModel.fromFirestore(d)).toList();
       list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       final model = list.first;
       return model.isExpired ? null : model;
@@ -161,9 +186,9 @@ class StudentsRepositoryImpl implements StudentsRepository {
 
   String _generateRandomCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    final random = Random();
+    final random = Random.secure();
     final randomPart =
-        List.generate(6, (index) => chars[random.nextInt(chars.length)]).join();
+        List.generate(6, (_) => chars[random.nextInt(chars.length)]).join();
     return 'OT-$randomPart';
   }
 }

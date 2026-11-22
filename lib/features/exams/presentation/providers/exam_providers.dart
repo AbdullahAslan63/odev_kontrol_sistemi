@@ -28,15 +28,21 @@ final studentExamsStreamProvider = StreamProvider.family<
 
 /// Bir sınıfın tüm sınav sonuçlarının canlı akışı
 /// Family parametresi: (classId, teacherId) record
-final classExamsStreamProvider =
-    StreamProvider.family<List<ExamResultEntity>, ({String classId, String teacherId})>((ref, params) {
-  return ref.watch(examsRepositoryProvider).getClassExams(params.classId, teacherId: params.teacherId);
+final classExamsStreamProvider = StreamProvider.family<List<ExamResultEntity>,
+    ({String classId, String teacherId})>((ref, params) {
+  return ref
+      .watch(examsRepositoryProvider)
+      .getClassExams(params.classId, teacherId: params.teacherId);
 });
 
 /// Öğrencinin aktif hedefinin canlı akışı
-final studentGoalStreamProvider =
-    StreamProvider.family<GoalEntity?, String>((ref, studentId) {
-  return ref.watch(goalsRepositoryProvider).getStudentGoal(studentId);
+final studentGoalStreamProvider = StreamProvider.family<GoalEntity?,
+    ({String studentId, String? teacherId})>((ref, params) {
+  if (params.studentId.isEmpty) return Stream.value(null);
+  return ref.watch(goalsRepositoryProvider).getStudentGoal(
+        params.studentId,
+        teacherId: params.teacherId,
+      );
 });
 
 /// Sınav Ekleme ve Silme Notifier'ı
@@ -76,14 +82,18 @@ class ExamNotifier extends StateNotifier<AsyncValue<void>> {
 
       await _examRepo.addExamResult(exam);
 
-      // Öğrencinin hedefini güncelle
-      final activeGoal = await _goalRepo.getStudentGoal(studentId).first;
-      if (activeGoal != null) {
-        final updatedGoal = activeGoal.copyWith(
-          currentValue: activeGoal.type == 'score' ? totalScore : totalNet,
-        );
-        await _goalRepo.setGoal(updatedGoal);
-      }
+      // Öğrencinin hedefini güncelle (başarısız olsa bile sınav kaydını bozma)
+      try {
+        final activeGoal = await _goalRepo
+            .getStudentGoal(studentId, teacherId: teacherId)
+            .first;
+        if (activeGoal != null) {
+          final updatedGoal = activeGoal.copyWith(
+            currentValue: activeGoal.type == 'score' ? totalScore : totalNet,
+          );
+          await _goalRepo.setGoal(updatedGoal);
+        }
+      } catch (_) {}
 
       state = const AsyncValue.data(null);
       return true;

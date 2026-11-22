@@ -55,14 +55,15 @@ class AppConstants {
   static const double defaultWrongPenalty = 4.0;
 
   // ── Davet kodu ────────────────────────────────────────────────────────────
-  static const int inviteCodeExpiryDays = 7;
+  static const int inviteCodeExpiryDays = 14;
 
   // ── Sayfalama ─────────────────────────────────────────────────────────────
   static const int pageSize = 20;
 
   // ── Uygulama bilgileri ────────────────────────────────────────────────────
-  static const String supportEmail = 'destek@odevtakip.com';
+  static const String supportEmail = 'josephpgzl156@gmail.com';
   static const String privacyPolicyUrl =
       'https://cdn.jsdelivr.net/gh/AbdullahAslan63/odev_kontrol_sistemi@main/docs/privacy.html';
-  static const String termsUrl = 'https://odevtakip.com/kosullar';
+  static const String termsUrl =
+      'https://cdn.jsdelivr.net/gh/AbdullahAslan63/odev_kontrol_sistemi@main/docs/terms.html';
 }

@@ -13,16 +13,21 @@ class GoalsRepositoryImpl implements GoalsRepository {
       _firestore.collection('goals');
 
   @override
-  Stream<GoalEntity?> getStudentGoal(String studentId) {
-    return _goalsRef
+  Stream<GoalEntity?> getStudentGoal(
+    String studentId, {
+    String? teacherId,
+  }) {
+    if (studentId.isEmpty) return Stream.value(null);
+    Query<Map<String, dynamic>> query = _goalsRef
         .where('studentId', isEqualTo: studentId)
-        .where('isActive', isEqualTo: true)
-        .limit(1)
-        .snapshots()
-        .map((snapshot) {
+        .where('isActive', isEqualTo: true);
+    if (teacherId != null && teacherId.isNotEmpty) {
+      query = query.where('teacherId', isEqualTo: teacherId);
+    }
+    return query.limit(1).snapshots().map((snapshot) {
       if (snapshot.docs.isEmpty) return null;
       return GoalModel.fromFirestore(snapshot.docs.first);
-    });
+    }).handleError((_) => null);
   }
 
   @override

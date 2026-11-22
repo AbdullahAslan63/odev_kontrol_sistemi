@@ -1,3 +1,5 @@
+import 'dart:math';
+
 /// Net hesaplama yardımcısı.
 /// Türkiye'deki 4 yanlış 1 doğruyu götürür sistemi baz alınmıştır.
 class NetCalculator {
@@ -67,18 +69,13 @@ class InviteCodeGenerator {
 
   static const _chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-  /// Davet kodu oluştur: OT-{grade}{className}-{6 karakter}
-  static String generate(int gradeLevel, String className) {
-    final random = DateTime.now().millisecondsSinceEpoch;
+  /// Kriptografik rastgele davet kodu oluştur: OT-{6 karakter}
+  static String generate([int? gradeLevel, String? className]) {
+    final random = Random.secure();
     final buffer = StringBuffer();
-    var seed = random;
     for (var i = 0; i < 6; i++) {
-      buffer.write(_chars[seed % _chars.length]);
-      seed = seed ~/ _chars.length + (seed % 7 + 1) * 31;
+      buffer.write(_chars[random.nextInt(_chars.length)]);
     }
-    final classInitial = className.isNotEmpty
-        ? className[0].toUpperCase()
-        : 'A';
-    return 'OT-$gradeLevel$classInitial-$buffer';
+    return 'OT-$buffer';
   }
 }

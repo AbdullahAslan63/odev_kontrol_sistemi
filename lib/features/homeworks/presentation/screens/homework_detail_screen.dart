@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/theme/app_sizes.dart';
-import '../../../../core/widgets/app_widgets.dart';
-import '../../../../core/utils/app_utils.dart';
 import '../../../../core/extensions/extensions.dart';
-import '../../../students/presentation/providers/student_providers.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_sizes.dart';
+import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/utils/app_utils.dart';
+import '../../../../core/widgets/app_widgets.dart';
 import '../../../students/domain/entities/student_entity.dart';
-import '../providers/homework_providers.dart';
+import '../../../students/presentation/providers/student_providers.dart';
 import '../../domain/entities/homework_assignment_entity.dart';
+import '../providers/homework_providers.dart';
 
 class HomeworkDetailScreen extends ConsumerWidget {
   const HomeworkDetailScreen({super.key, required this.homeworkId});
@@ -18,8 +18,6 @@ class HomeworkDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final homeworkAsync = ref.watch(homeworkDetailProvider(homeworkId));
-    final assignmentsAsync =
-        ref.watch(homeworkAssignmentsStreamProvider(homeworkId));
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -32,14 +30,19 @@ class HomeworkDetailScreen extends ConsumerWidget {
             return const Center(child: Text('Ödev bulunamadı.'));
           }
 
-          final studentsAsync =
-              ref.watch(classStudentsStreamProvider(
-                (classId: homework.classId, teacherId: homework.teacherId),
-              ));
+          final studentsAsync = ref.watch(
+            classStudentsStreamProvider(
+              (classId: homework.classId, teacherId: homework.teacherId),
+            ),
+          );
+          final assignmentsAsync = ref.watch(
+            homeworkAssignmentsStreamProvider(
+              (homeworkId: homeworkId, teacherId: homework.teacherId),
+            ),
+          );
 
           return Column(
             children: [
-              // ── Ödev Özet Kartı ───────────────────────────────────────────
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
@@ -52,7 +55,9 @@ class HomeworkDetailScreen extends ConsumerWidget {
                       children: [
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color:
                                 AppColors.teacherPrimary.withValues(alpha: 0.1),
@@ -66,15 +71,18 @@ class HomeworkDetailScreen extends ConsumerWidget {
                             ),
                           ),
                         ),
-                        Text(
-                          'Son Teslim: ${homework.dueDate.toTurkishDate()}',
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: homework.isOverdue
-                                ? AppColors.error
-                                : AppColors.textSecondary,
-                            fontWeight: homework.isOverdue
-                                ? FontWeight.bold
-                                : FontWeight.normal,
+                        Flexible(
+                          child: Text(
+                            'Son Teslim: ${homework.dueDate.toTurkishDate()}',
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: homework.isOverdue
+                                  ? AppColors.error
+                                  : AppColors.textSecondary,
+                              fontWeight: homework.isOverdue
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
                           ),
                         ),
                       ],
@@ -92,30 +100,40 @@ class HomeworkDetailScreen extends ConsumerWidget {
                     ],
                     if (homework.description != null) ...[
                       const SizedBox(height: 8),
-                      Text(homework.description!,
-                          style: AppTextStyles.bodySmall),
+                      Text(
+                        homework.description!,
+                        style: AppTextStyles.bodySmall,
+                      ),
                     ],
                   ],
                 ),
               ),
-
               const Divider(height: 1),
-
-              // ── Öğrenci Ödev Kontrol Listesi ───────────────────────────────
               Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Öğrenci Kontrol Listesi', style: AppTextStyles.h4),
-                    const Text('Durumu değiştirmek için tıklayın',
+                    Expanded(
+                      child: Text(
+                        'Öğrenci Kontrol Listesi',
+                        style: AppTextStyles.h4,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Flexible(
+                      child: Text(
+                        'Durum için dokunun',
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                            fontSize: 12, color: AppColors.textSecondary)),
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
-
               Expanded(
                 child: studentsAsync.when(
                   data: (students) {
@@ -123,17 +141,16 @@ class HomeworkDetailScreen extends ConsumerWidget {
                       data: (assignments) {
                         if (students.isEmpty) {
                           return const Center(
-                              child: Text('Sınıfta öğrenci yok.'));
+                            child: Text('Sınıfta öğrenci yok.'),
+                          );
                         }
 
-                        // Map assignment by studentId
                         final assignmentMap = {
-                          for (var a in assignments) a.studentId: a
+                          for (final a in assignments) a.studentId: a,
                         };
 
                         return ListView.separated(
-                          padding:
-                              const EdgeInsets.all(AppSizes.pagePadding),
+                          padding: const EdgeInsets.all(AppSizes.pagePadding),
                           itemCount: students.length,
                           separatorBuilder: (_, __) =>
                               const SizedBox(height: 8),
@@ -145,14 +162,20 @@ class HomeworkDetailScreen extends ConsumerWidget {
                               student: student,
                               assignment: assignment,
                               dueDate: homework.dueDate,
-                              onStatusChange: (newStatus) {
-                                if (assignment != null) {
-                                  ref
-                                      .read(homeworkNotifierProvider.notifier)
-                                      .updateStatus(
-                                        assignmentId: assignment.id,
-                                        status: newStatus,
-                                      );
+                              onStatusChange: (newStatus) async {
+                                if (assignment == null) return;
+                                final ok = await ref
+                                    .read(homeworkNotifierProvider.notifier)
+                                    .updateStatus(
+                                      assignmentId: assignment.id,
+                                      status: newStatus,
+                                    );
+                                if (!context.mounted) return;
+                                if (!ok) {
+                                  context.showSnackBar(
+                                    'Ödev durumu güncellenemedi.',
+                                    isError: true,
+                                  );
                                 }
                               },
                             );
@@ -161,13 +184,14 @@ class HomeworkDetailScreen extends ConsumerWidget {
                       },
                       loading: () =>
                           const Center(child: CircularProgressIndicator()),
-                      error: (err, __) =>
-                          const Center(child: Text('Atama bilgisi bulunamadı.')),
+                      error: (_, __) => const Center(
+                        child: Text('Atama bilgisi bulunamadı.'),
+                      ),
                     );
                   },
                   loading: () =>
                       const Center(child: CircularProgressIndicator()),
-                  error: (err, __) =>
+                  error: (_, __) =>
                       const Center(child: Text('Öğrenci bilgisi bulunamadı.')),
                 ),
               ),
@@ -175,7 +199,7 @@ class HomeworkDetailScreen extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, __) => const Center(child: Text('Ödev bilgisi bulunamadı.')),
+        error: (_, __) => const Center(child: Text('Ödev bilgisi bulunamadı.')),
       ),
     );
   }
@@ -192,7 +216,7 @@ class _StudentAssignmentRow extends StatelessWidget {
   final StudentEntity student;
   final HomeworkAssignmentEntity? assignment;
   final DateTime dueDate;
-  final Function(String newStatus) onStatusChange;
+  final void Function(String newStatus) onStatusChange;
 
   @override
   Widget build(BuildContext context) {
@@ -215,8 +239,9 @@ class _StudentAssignmentRow extends StatelessWidget {
             child: Text(
               student.name.isNotEmpty ? student.name[0].toUpperCase() : '?',
               style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.teacherPrimary),
+                fontWeight: FontWeight.bold,
+                color: AppColors.teacherPrimary,
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -232,8 +257,11 @@ class _StudentAssignmentRow extends StatelessWidget {
                 value: 'completed',
                 child: Row(
                   children: [
-                    Icon(Icons.check_circle_rounded,
-                        color: AppColors.success, size: 20),
+                    Icon(
+                      Icons.check_circle_rounded,
+                      color: AppColors.success,
+                      size: 20,
+                    ),
                     SizedBox(width: 8),
                     Text('Tamamlandı'),
                   ],
@@ -243,8 +271,7 @@ class _StudentAssignmentRow extends StatelessWidget {
                 value: 'missed',
                 child: Row(
                   children: [
-                    Icon(Icons.cancel_rounded,
-                        color: AppColors.error, size: 20),
+                    Icon(Icons.cancel_rounded, color: AppColors.error, size: 20),
                     SizedBox(width: 8),
                     Text('Yapılmadı'),
                   ],
@@ -254,8 +281,11 @@ class _StudentAssignmentRow extends StatelessWidget {
                 value: 'pending',
                 child: Row(
                   children: [
-                    Icon(Icons.schedule_rounded,
-                        color: AppColors.warning, size: 20),
+                    Icon(
+                      Icons.schedule_rounded,
+                      color: AppColors.warning,
+                      size: 20,
+                    ),
                     SizedBox(width: 8),
                     Text('Bekliyor'),
                   ],

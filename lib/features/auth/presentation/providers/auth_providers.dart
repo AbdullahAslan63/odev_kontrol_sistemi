@@ -172,20 +172,6 @@ class ParentAuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> signInWithPhone({
-    required String phone,
-  }) async {
-    state = state.loading;
-    try {
-      await _repo.signInOrRegisterParentWithPhone(phone: phone);
-      state = state.success;
-    } on AuthException catch (e) {
-      state = state.error(e.message);
-    } catch (_) {
-      state = state.error('Telefon ile giriş yapılırken bir hata oluştu.');
-    }
-  }
-
   /// Öğretmen davet koduyla gerçek öğrenciyi veli hesabına bağlar
   Future<bool> linkChildWithInviteCode(String inviteCode) async {
     state = state.loading;
@@ -241,9 +227,11 @@ class PasswordResetNotifier extends StateNotifier<AuthState> {
       state = state.error('E-posta gönderilemedi.');
     }
   }
+
+  void reset() => state = const AuthState();
 }
 
-final passwordResetProvider =
-    StateNotifierProvider<PasswordResetNotifier, AuthState>((ref) {
+final passwordResetProvider = StateNotifierProvider.autoDispose<
+    PasswordResetNotifier, AuthState>((ref) {
   return PasswordResetNotifier(ref.watch(authRepositoryProvider));
 });

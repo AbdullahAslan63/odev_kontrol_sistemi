@@ -1,19 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../providers/auth_providers.dart';
+import '../../../../core/constants/app_strings.dart';
+import '../../../../core/extensions/extensions.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_sizes.dart';
+import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_buttons.dart';
 import '../../../../core/widgets/app_text_field.dart';
-import '../../../../core/widgets/matpusula_logo.dart';
-import '../../../../core/extensions/extensions.dart';
-import '../../../../core/services/sms_service.dart';
+import '../../../../core/widgets/eduly_logo.dart';
+import '../providers/auth_providers.dart';
 
-/// MatPusula Yenilenmiş Giriş Ekranı
-/// - Öğretmen: Kullanıcı Adı / E-posta + Şifre
-/// - Veli: 2 Adımlı Şifresiz Giriş (Telefon Numarası -> Kodu Gönder -> Doğrulama Kodu -> Giriş/Kayıt Yap)
+/// Eduly Giriş Ekranı (Öğretmen & Veli — E-posta ve Şifre)
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -22,107 +20,56 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final _teacherFormKey = GlobalKey<FormState>();
-  final _parentFormKey = GlobalKey<FormState>();
+  final _formKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
 
-  // Öğretmen alanları
-  final _teacherIdentityController = TextEditingController();
-  final _teacherPasswordController = TextEditingController();
-
-  // Veli alanları (ŞİFRESİZ TELEFON & SMS KODU)
-  final _parentPhoneController = TextEditingController(text: '0531 563 5049');
-  final _parentOtpController = TextEditingController(text: '123456');
-
-  bool _isTeacherRole = true; // true = Öğretmen, false = Veli
-  bool _isSmsSent = false;
-  bool _isSendingSms = false;
+  bool _isTeacherRole = true;
 
   @override
   void dispose() {
-    _teacherIdentityController.dispose();
-    _teacherPasswordController.dispose();
-    _parentPhoneController.dispose();
-    _parentOtpController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
-  // ── Öğretmen Girişi ──────────────────────────────────────────────────────
-  Future<void> _submitTeacherLogin() async {
+  Future<void> _submitLogin() async {
     context.unfocus();
-    if (!_teacherFormKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) return;
 
-    final input = _teacherIdentityController.text.trim();
-    final password = _teacherPasswordController.text;
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
 
-    await ref.read(teacherAuthProvider.notifier).signIn(
-          email: input,
-          password: password,
+    if (_isTeacherRole) {
+      await ref
+          .read(teacherAuthProvider.notifier)
+          .signIn(email: email, password: password);
+      if (!mounted) return;
+      final state = ref.read(teacherAuthProvider);
+      if (state.isSuccess) {
+        final user = ref.read(currentUserProvider);
+        context.go(
+          user?.isParent == true ? '/parent/home' : '/teacher/home',
         );
-
-    if (!mounted) return;
-    final state = ref.read(teacherAuthProvider);
-    if (state.isSuccess) {
-      context.go('/teacher/home');
-    } else if (state.errorMessage != null) {
-      context.showSnackBar(state.errorMessage!, isError: true);
-      ref.read(teacherAuthProvider.notifier).clearError();
-    }
-  }
-
-  // ── Veli SMS Kodu Gönder ──────────────────────────────────────────────────
-  Future<void> _sendParentSms() async {
-    context.unfocus();
-    final phone = _parentPhoneController.text.trim();
-    if (phone.length < 10) {
-      context.showSnackBar('Lütfen geçerli bir telefon numarası giriniz.', isError: true);
-      return;
-    }
-
-    setState(() => _isSendingSms = true);
-    final res = await SmsService.sendOtp(phone);
-    if (!mounted) return;
-    setState(() => _isSendingSms = false);
-
-    if (res['success'] == true) {
-      setState(() => _isSmsSent = true);
-      context.showSnackBar('✅ SMS doğrulama kodu gönderildi. (Sabit Test Kodu: 123456)');
+      } else if (state.errorMessage != null) {
+        context.showSnackBar(state.errorMessage!, isError: true);
+        ref.read(teacherAuthProvider.notifier).clearError();
+      }
     } else {
-      context.showSnackBar(res['message'] ?? 'SMS gönderilemedi.', isError: true);
-    }
-  }
-
-  // ── Veli Telefon & OTP Doğrulama ile Şifresiz Giriş / Kayıt ─────────────
-  Future<void> _submitParentLogin() async {
-    context.unfocus();
-    if (!_parentFormKey.currentState!.validate()) return;
-
-    final phone = _parentPhoneController.text.trim();
-    final otpCode = _parentOtpController.text.trim();
-
-    if (!_isSmsSent) {
-      await _sendParentSms();
-      return;
-    }
-
-    final isValidOtp = await SmsService.verifyOtp(phone, otpCode);
-    if (!mounted) return;
-
-    if (!isValidOtp) {
-      context.showSnackBar('Hatalı doğrulama kodu! Lütfen 123456 kodunu giriniz.', isError: true);
-      return;
-    }
-
-    // Telefon ile şifresiz giriş veya kayıt yap (tek adımda tamamlar)
-    await ref.read(parentAuthProvider.notifier).signInWithPhone(phone: phone);
-
-    if (!mounted) return;
-    final state = ref.read(parentAuthProvider);
-    if (state.isSuccess) {
-      context.showSnackBar('✅ Veli girişi başarılı!');
-      context.go('/parent/home');
-    } else if (state.errorMessage != null) {
-      context.showSnackBar(state.errorMessage!, isError: true);
-      ref.read(parentAuthProvider.notifier).clearError();
+      await ref
+          .read(parentAuthProvider.notifier)
+          .signIn(email: email, password: password);
+      if (!mounted) return;
+      final state = ref.read(parentAuthProvider);
+      if (state.isSuccess) {
+        final user = ref.read(currentUserProvider);
+        context.go(
+          user?.isTeacher == true ? '/teacher/home' : '/parent/home',
+        );
+      } else if (state.errorMessage != null) {
+        context.showSnackBar(state.errorMessage!, isError: true);
+        ref.read(parentAuthProvider.notifier).clearError();
+      }
     }
   }
 
@@ -147,14 +94,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             children: [
               const SizedBox(height: 12),
 
-              // ── MatPusula Logo & Header ─────────────────────────────────────
+              // ── Eduly Logo & Başlık ───────────────────────────────────────
               Center(
                 child: Column(
                   children: [
-                    const MatPusulaLogo(size: 84),
+                    const EdulyLogo(size: 84),
                     const SizedBox(height: 12),
                     Text(
-                      'Eduly',
+                      AppStrings.appName,
                       style: AppTextStyles.h1.copyWith(
                         color: activeColor,
                         fontWeight: FontWeight.bold,
@@ -163,7 +110,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Geleceğini Matematikle Şekillendir',
+                      'Ödev & Eğitim Takip Platformu',
                       style: AppTextStyles.bodyMedium.copyWith(
                         color: AppColors.textSecondary,
                         fontWeight: FontWeight.w500,
@@ -174,7 +121,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               const SizedBox(height: 28),
 
-              // ── Kullanıcı Türü Seçimi (Öğretmen / Veli) ───────────────────
+              // ── Kullanıcı Türü Seçimi (Öğretmen / Veli) ──────────────────
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
@@ -190,9 +137,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         icon: Icons.school_rounded,
                         isSelected: _isTeacherRole,
                         activeColor: AppColors.teacherPrimary,
-                        onTap: () {
-                          setState(() => _isTeacherRole = true);
-                        },
+                        onTap: () => setState(() => _isTeacherRole = true),
                       ),
                     ),
                     const SizedBox(width: 6),
@@ -202,9 +147,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         icon: Icons.family_restroom_rounded,
                         isSelected: !_isTeacherRole,
                         activeColor: AppColors.parentPrimary,
-                        onTap: () {
-                          setState(() => _isTeacherRole = false);
-                        },
+                        onTap: () => setState(() => _isTeacherRole = false),
                       ),
                     ),
                   ],
@@ -212,226 +155,113 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               const SizedBox(height: 24),
 
-              // ── Tab İçerikleri ─────────────────────────────────────────────
-              if (_isTeacherRole)
-                _buildTeacherLoginForm(isLoading)
-              else
-                _buildParentPhoneLoginForm(isLoading),
+              // ── Giriş Formu ──────────────────────────────────────────────
+              Form(
+                key: _formKey,
+                child: Column(
+                  children: [
+                    AppTextField(
+                      label: AppStrings.email,
+                      hint: _isTeacherRole
+                          ? 'ogretmen@okul.com'
+                          : 'veli@eposta.com',
+                      controller: _emailController,
+                      prefixIcon: Icon(
+                        Icons.email_outlined,
+                        color: activeColor,
+                      ),
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) {
+                          return AppStrings.errorEmailRequired;
+                        }
+                        if (!v.trim().isValidEmail) {
+                          return AppStrings.errorEmailInvalid;
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: AppSizes.itemSpacing),
+                    AppTextField(
+                      label: AppStrings.password,
+                      hint: 'Şifrenizi girin',
+                      controller: _passwordController,
+                      isPassword: true,
+                      prefixIcon: Icon(
+                        Icons.lock_outline_rounded,
+                        color: activeColor,
+                      ),
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => _submitLogin(),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) {
+                          return AppStrings.errorPasswordRequired;
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => context.push('/forgot-password'),
+                        child: Text(
+                          'Şifremi Unuttum?',
+                          style: AppTextStyles.labelLarge.copyWith(
+                            color: activeColor,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    PrimaryButton(
+                      label: _isTeacherRole
+                          ? 'Öğretmen Girişi Yap'
+                          : 'Veli Girişi Yap',
+                      onPressed: _submitLogin,
+                      isLoading: isLoading,
+                      backgroundColor: activeColor,
+                    ),
+                    const SizedBox(height: 24),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          'Hesabınız yok mu? ',
+                          style: AppTextStyles.bodyMedium,
+                        ),
+                        TextButton(
+                          onPressed: () => context.push(
+                            _isTeacherRole
+                                ? '/register/teacher'
+                                : '/register/parent',
+                          ),
+                          child: Text(
+                            _isTeacherRole
+                                ? 'Öğretmen Kaydı Oluştur'
+                                : 'Davet Kodu ile Veli Kaydı',
+                            style: AppTextStyles.labelLarge.copyWith(
+                              color: activeColor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
   }
-
-  // ── Öğretmen Giriş Formu (Kullanıcı Adı & Şifre) ──────────────────────────
-  Widget _buildTeacherLoginForm(bool isLoading) {
-    return Form(
-      key: _teacherFormKey,
-      child: Column(
-        children: [
-          AppTextField(
-            label: 'Kullanıcı Adı veya E-posta',
-            hint: 'ahmet@okul.com / ahmet123',
-            controller: _teacherIdentityController,
-            prefixIcon: const Icon(Icons.person_outline_rounded, color: AppColors.teacherPrimary),
-            keyboardType: TextInputType.emailAddress,
-            textInputAction: TextInputAction.next,
-            validator: (v) {
-              if (v == null || v.trim().isEmpty) return 'Kullanıcı adı veya e-posta giriniz';
-              return null;
-            },
-          ),
-          const SizedBox(height: AppSizes.itemSpacing),
-          AppTextField(
-            label: 'Şifre',
-            hint: 'Şifrenizi girin',
-            controller: _teacherPasswordController,
-            isPassword: true,
-            prefixIcon: const Icon(Icons.lock_outline_rounded, color: AppColors.teacherPrimary),
-            textInputAction: TextInputAction.done,
-            onFieldSubmitted: (_) => _submitTeacherLogin(),
-            validator: (v) {
-              if (v == null || v.isEmpty) return 'Lütfen şifrenizi girin';
-              return null;
-            },
-          ),
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: () => context.push('/forgot-password'),
-              child: Text(
-                'Şifremi Unuttum?',
-                style: AppTextStyles.labelLarge.copyWith(
-                  color: AppColors.teacherPrimary,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          PrimaryButton(
-            label: 'Öğretmen Girişi Yap 🚀',
-            onPressed: _submitTeacherLogin,
-            isLoading: isLoading,
-            backgroundColor: AppColors.teacherPrimary,
-          ),
-          const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text('Hesabınız yok mu? ', style: AppTextStyles.bodyMedium),
-              TextButton(
-                onPressed: () => context.push('/register/teacher'),
-                child: Text(
-                  'Öğretmen Kaydı Oluştur',
-                  style: AppTextStyles.labelLarge.copyWith(
-                    color: AppColors.teacherPrimary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Veli ŞİFRESİZ Telefon & SMS Kodu Giriş/Kayıt Formu ────────────────────
-  Widget _buildParentPhoneLoginForm(bool isLoading) {
-    return Form(
-      key: _parentFormKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.parentSurface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.parentPrimary.withValues(alpha: 0.2)),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.shield_outlined, color: AppColors.parentPrimary, size: 22),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Şifreye gerek yok! Numaranızı girip doğrulama kodu isteyin.',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // 1. Telefon Numarası Alanı
-          AppTextField(
-            label: 'Telefon Numarası',
-            hint: '0531 563 5049',
-            controller: _parentPhoneController,
-            prefixIcon: const Icon(Icons.phone_android_rounded, color: AppColors.parentPrimary),
-            keyboardType: TextInputType.phone,
-            textInputAction: _isSmsSent ? TextInputAction.next : TextInputAction.done,
-            validator: (v) {
-              if (v == null || v.trim().length < 10) return 'Geçerli bir telefon numarası giriniz';
-              return null;
-            },
-          ),
-          const SizedBox(height: 16),
-
-          // 2. Eğer SMS Kodu Gönderildi ise: Doğrulama Kodu Alanı Görünür
-          if (_isSmsSent) ...[
-            AppTextField(
-              label: 'SMS Doğrulama Kodu',
-              hint: '123456',
-              controller: _parentOtpController,
-              prefixIcon: const Icon(Icons.mark_chat_unread_rounded, color: AppColors.parentPrimary),
-              keyboardType: TextInputType.number,
-              textInputAction: TextInputAction.done,
-              onFieldSubmitted: (_) => _submitParentLogin(),
-              validator: (v) {
-                if (v == null || v.trim().length < 6) return '6 haneli doğrulama kodunu giriniz';
-                return null;
-              },
-            ),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppColors.parentSurface,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.parentPrimary.withValues(alpha: 0.3)),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.info_outline_rounded, size: 18, color: AppColors.parentPrimary),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Sabit Test Kodu: Tüm telefonlar için geçerli doğrulama kodu: 123456',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.parentPrimary),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Doğrula & Giriş/Kayıt Yap Butonu
-            PrimaryButton(
-              label: 'Doğrula & Giriş Yap 🚀',
-              onPressed: _submitParentLogin,
-              isLoading: isLoading,
-              backgroundColor: AppColors.parentPrimary,
-            ),
-          ] else ...[
-            const SizedBox(height: 8),
-            // Kodu Gönder / SMS İste Butonu
-            PrimaryButton(
-              label: 'Doğrulama Kodu Gönder 📩',
-              onPressed: _sendParentSms,
-              isLoading: _isSendingSms,
-              backgroundColor: AppColors.parentPrimary,
-            ),
-          ],
-
-          const SizedBox(height: 24),
-
-          Center(
-            child: Wrap(
-              alignment: WrapAlignment.center,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text('İlk defa davet koduyla mı geliyorsunuz? ', style: AppTextStyles.bodySmall),
-                TextButton(
-                  onPressed: () => context.push('/register/parent'),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: Text(
-                    'Davet Kodu Eşleştir',
-                    style: AppTextStyles.labelMedium.copyWith(
-                      color: AppColors.parentPrimary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
-/// Kullanıcı Türü Seçim Butonu Component
 class _RoleTabButton extends StatelessWidget {
   const _RoleTabButton({
     required this.title,
