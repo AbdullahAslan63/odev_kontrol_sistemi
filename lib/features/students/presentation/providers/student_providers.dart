@@ -14,8 +14,8 @@ final selectedParentStudentIdProvider = StateProvider<String?>((ref) => null);
 
 /// Sınıfa göre öğrencilerin canlı akışı
 /// Family parametresi: (classId, teacherId) record
-final classStudentsStreamProvider = StreamProvider.family<List<StudentEntity>,
-    ({String classId, String teacherId})>((ref, params) {
+final classStudentsStreamProvider = StreamProvider.autoDispose.family<
+    List<StudentEntity>, ({String classId, String teacherId})>((ref, params) {
   final teacherId = params.teacherId.isNotEmpty
       ? params.teacherId
       : (FirebaseAuth.instance.currentUser?.uid ?? '');
@@ -28,21 +28,22 @@ final classStudentsStreamProvider = StreamProvider.family<List<StudentEntity>,
 });
 
 /// Tek öğrenci akışı
-final studentStreamProvider =
-    StreamProvider.family<StudentEntity?, String>((ref, studentId) {
+final studentStreamProvider = StreamProvider.autoDispose
+    .family<StudentEntity?, String>((ref, studentId) {
   return ref.watch(studentsRepositoryProvider).getStudentStream(studentId);
 });
 
 /// Veliye bağlı öğrencilerin canlı akışı
-final parentStudentsStreamProvider =
-    StreamProvider.family<List<StudentEntity>, String>((ref, parentUid) {
+final parentStudentsStreamProvider = StreamProvider.autoDispose
+    .family<List<StudentEntity>, String>((ref, parentUid) {
   if (parentUid.isEmpty) return Stream.value(const <StudentEntity>[]);
   return ref.watch(studentsRepositoryProvider).getParentStudents(parentUid);
 });
 
 /// Öğrencinin aktif davet kodu getirme provider'ı
-final activeInviteCodeProvider = FutureProvider.family<InviteCodeModel?,
-    ({String studentId, String teacherId})>((ref, params) {
+final activeInviteCodeProvider = FutureProvider.autoDispose
+    .family<InviteCodeModel?, ({String studentId, String teacherId})>(
+        (ref, params) {
   final teacherId = params.teacherId.isNotEmpty
       ? params.teacherId
       : (FirebaseAuth.instance.currentUser?.uid ?? '');

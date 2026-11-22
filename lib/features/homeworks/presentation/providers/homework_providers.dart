@@ -19,7 +19,7 @@ final teacherHomeworksStreamProvider =
 });
 
 /// Bir ödeve ait öğrenci durumlarının akışı (teacherId zorunlu)
-final homeworkAssignmentsStreamProvider = StreamProvider.family<
+final homeworkAssignmentsStreamProvider = StreamProvider.autoDispose.family<
     List<HomeworkAssignmentEntity>,
     ({String homeworkId, String teacherId})>((ref, params) {
   final teacherId = params.teacherId.isNotEmpty
@@ -32,17 +32,18 @@ final homeworkAssignmentsStreamProvider = StreamProvider.family<
 });
 
 /// Bir öğrenciye ait tüm ödev atamalarının canlı akışı (Veli paneli için)
-final studentAssignmentsStreamProvider = StreamProvider.family<
-    List<HomeworkAssignmentEntity>, String>((ref, studentId) {
+final studentAssignmentsStreamProvider = StreamProvider.autoDispose
+    .family<List<HomeworkAssignmentEntity>, String>((ref, studentId) {
   return ref
       .watch(homeworksRepositoryProvider)
       .getStudentAssignments(studentId);
 });
 
-/// Tek bir ödevin detaylarını getiren provider
+/// Tek bir ödevin detaylarını canlı getiren provider
 final homeworkDetailProvider =
-    FutureProvider.family<HomeworkEntity?, String>((ref, homeworkId) {
-  return ref.watch(homeworksRepositoryProvider).getHomeworkById(homeworkId);
+    StreamProvider.autoDispose.family<HomeworkEntity?, String>(
+        (ref, homeworkId) {
+  return ref.watch(homeworksRepositoryProvider).watchHomeworkById(homeworkId);
 });
 
 /// Ödev oluşturma ve durum güncelleme Notifier'ı
@@ -94,6 +95,34 @@ class HomeworkNotifier extends StateNotifier<AsyncValue<void>> {
     try {
       await _repo.updateAssignmentStatus(
         assignmentId: assignmentId,
+        status: status,
+        teacherNote: teacherNote,
+      );
+      state = const AsyncValue.data(null);
+      return true;
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+      return false;
+    }
+  }
+
+  Future<bool> upsertStatus({
+    String? assignmentId,
+    required String homeworkId,
+    required String studentId,
+    required String classId,
+    required String teacherId,
+    required String status,
+    String? teacherNote,
+  }) async {
+    state = const AsyncValue.loading();
+    try {
+      await _repo.upsertAssignmentStatus(
+        assignmentId: assignmentId,
+        homeworkId: homeworkId,
+        studentId: studentId,
+        classId: classId,
+        teacherId: teacherId,
         status: status,
         teacherNote: teacherNote,
       );

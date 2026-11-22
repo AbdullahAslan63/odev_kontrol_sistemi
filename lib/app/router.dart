@@ -129,7 +129,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       // ── Öğretmen rotaları ─────────────────────────────────────────────────
       ShellRoute(
         builder: (context, state, child) {
-          return TeacherShell(child: child);
+          return TeacherShell(
+            location: state.uri.toString(),
+            child: child,
+          );
         },
         routes: [
           GoRoute(
@@ -202,7 +205,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       // ── Veli rotaları ─────────────────────────────────────────────────────
       ShellRoute(
         builder: (context, state, child) {
-          return ParentShell(child: child);
+          return ParentShell(
+            location: state.uri.toString(),
+            child: child,
+          );
         },
         routes: [
           GoRoute(
@@ -246,13 +252,36 @@ final routerProvider = Provider<GoRouter>((ref) {
 // ── Öğretmen Shell (Bottom Navigation) ───────────────────────────────────────
 
 class TeacherShell extends StatelessWidget {
-  const TeacherShell({super.key, required this.child});
+  const TeacherShell({
+    super.key,
+    required this.child,
+    this.location,
+  });
+
   final Widget child;
+  final String? location;
+
+  static int resolveIndex(String location) {
+    if (location.startsWith('/teacher/homeworks')) return 2;
+    if (location == '/teacher/home' || location.startsWith('/teacher/home?')) {
+      return 0;
+    }
+    if (location.startsWith('/teacher/classes') ||
+        location.startsWith('/teacher/students')) {
+      return 1;
+    }
+    if (location.startsWith('/teacher/exams') ||
+        location.startsWith('/teacher/analytics')) {
+      return 3;
+    }
+    return 4;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final location = GoRouterState.of(context).uri.toString();
-    final currentIndex = _getTeacherIndex(location);
+    final currentLocation =
+        location ?? GoRouterState.of(context).uri.toString();
+    final currentIndex = resolveIndex(currentLocation);
 
     return Scaffold(
       body: child,
@@ -290,20 +319,6 @@ class TeacherShell extends StatelessWidget {
     );
   }
 
-  int _getTeacherIndex(String location) {
-    if (location.startsWith('/teacher/home')) return 0;
-    if (location.startsWith('/teacher/classes') ||
-        location.startsWith('/teacher/students')) {
-      return 1;
-    }
-    if (location.startsWith('/teacher/homeworks')) return 2;
-    if (location.startsWith('/teacher/exams') ||
-        location.startsWith('/teacher/analytics')) {
-      return 3;
-    }
-    return 4;
-  }
-
   void _onTeacherNav(BuildContext context, int index) {
     switch (index) {
       case 0:
@@ -323,13 +338,30 @@ class TeacherShell extends StatelessWidget {
 // ── Veli Shell (Bottom Navigation) ───────────────────────────────────────────
 
 class ParentShell extends StatelessWidget {
-  const ParentShell({super.key, required this.child});
+  const ParentShell({
+    super.key,
+    required this.child,
+    this.location,
+  });
+
   final Widget child;
+  final String? location;
+
+  static int resolveIndex(String location) {
+    if (location.startsWith('/parent/homeworks')) return 1;
+    if (location == '/parent/home' || location.startsWith('/parent/home?')) {
+      return 0;
+    }
+    if (location.startsWith('/parent/exams')) return 2;
+    if (location.startsWith('/parent/messages')) return 3;
+    return 4;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final location = GoRouterState.of(context).uri.toString();
-    final currentIndex = _getParentIndex(location);
+    final currentLocation =
+        location ?? GoRouterState.of(context).uri.toString();
+    final currentIndex = resolveIndex(currentLocation);
 
     return Scaffold(
       body: child,
@@ -365,14 +397,6 @@ class ParentShell extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  int _getParentIndex(String location) {
-    if (location.startsWith('/parent/home')) return 0;
-    if (location.startsWith('/parent/homeworks')) return 1;
-    if (location.startsWith('/parent/exams')) return 2;
-    if (location.startsWith('/parent/messages')) return 3;
-    return 4;
   }
 
   void _onParentNav(BuildContext context, int index) {

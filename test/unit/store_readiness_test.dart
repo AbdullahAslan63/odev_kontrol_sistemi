@@ -1,16 +1,32 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:odev_takip/app/router.dart';
 import 'package:odev_takip/core/extensions/extensions.dart';
 import 'package:odev_takip/core/utils/app_utils.dart';
 import 'package:odev_takip/core/utils/phone_number_helper.dart';
+import 'package:odev_takip/features/auth/data/repositories/auth_repository_impl.dart';
 import 'package:odev_takip/features/auth/domain/entities/app_user.dart';
 import 'package:odev_takip/features/auth/presentation/providers/auth_providers.dart';
 import 'package:odev_takip/features/auth/presentation/screens/login_screen.dart';
 import 'package:odev_takip/features/auth/presentation/screens/parent_register_screen.dart';
+import 'package:odev_takip/features/classes/domain/entities/class_entity.dart';
+import 'package:odev_takip/features/classes/presentation/providers/class_providers.dart';
+import 'package:odev_takip/features/dashboard/presentation/screens/parent_home_screen.dart';
+import 'package:odev_takip/features/dashboard/presentation/screens/teacher_home_screen.dart';
+import 'package:odev_takip/features/exams/domain/entities/exam_result_entity.dart';
+import 'package:odev_takip/features/exams/presentation/providers/exam_providers.dart';
+import 'package:odev_takip/features/goals/domain/entities/goal_entity.dart';
+import 'package:odev_takip/features/homeworks/domain/entities/homework_assignment_entity.dart';
+import 'package:odev_takip/features/homeworks/domain/entities/homework_entity.dart';
+import 'package:odev_takip/features/homeworks/presentation/providers/homework_providers.dart';
+import 'package:odev_takip/features/messages/domain/entities/message_entity.dart';
+import 'package:odev_takip/features/messages/presentation/providers/messages_providers.dart';
 import 'package:odev_takip/features/students/data/models/invite_code_model.dart';
 import 'package:odev_takip/features/students/domain/entities/student_entity.dart';
+import 'package:odev_takip/features/students/presentation/providers/student_providers.dart';
 
 void main() {
   group('InviteCodeModel & Extensions Tests', () {
@@ -116,6 +132,234 @@ void main() {
       expect(resolved, isNotNull);
       expect(resolved!.uid, 'uid-1');
       expect(resolved.isParent, isTrue);
+    });
+
+    test(
+        'switchMapStream iç profil akışı kapanmasa bile signOut sonrası anında null yayar',
+        () async {
+      final outer = StreamController<String?>();
+      var innerCanceled = false;
+      final innerProfile = StreamController<AppUser?>(
+        onCancel: () {
+          innerCanceled = true;
+        },
+      );
+      addTearDown(() async {
+        await innerProfile.close();
+        await outer.close();
+      });
+
+      final sampleUser = AppUser(
+        uid: 'teacher-1',
+        role: 'teacher',
+        name: 'Yusuf',
+        email: 'yusuf@example.com',
+        createdAt: DateTime(2026, 11, 22),
+        updatedAt: DateTime(2026, 11, 22),
+      );
+
+      final emitted = <AppUser?>[];
+      final sub = switchMapStream<String?, AppUser?>(outer.stream, (uid) {
+        if (uid == null) return Stream<AppUser?>.value(null);
+        return innerProfile.stream;
+      }).listen(emitted.add);
+      addTearDown(sub.cancel);
+
+      outer.add('teacher-1');
+      await Future<void>.delayed(Duration.zero);
+      innerProfile.add(sampleUser);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(emitted.length, 1);
+      expect(emitted.last?.uid, 'teacher-1');
+      expect(innerCanceled, isFalse);
+
+      // Çıkış olayı: iç Firestore stream'i henüz kapanmamışken dahi null hemen yayınlanmalı
+      outer.add(null);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(innerCanceled, isTrue);
+      expect(emitted.length, 2);
+      expect(emitted.last, isNull);
+    });
+  });
+
+  group('Navigation & Dashboard Redesign Tests', () {
+    test('TeacherShell ve ParentShell bottom nav indekslerini doğru çözer',
+        () {
+      expect(TeacherShell.resolveIndex('/teacher/home'), 0);
+      expect(TeacherShell.resolveIndex('/teacher/classes'), 1);
+      expect(TeacherShell.resolveIndex('/teacher/students/stu-1'), 1);
+      expect(TeacherShell.resolveIndex('/teacher/homeworks'), 2);
+      expect(TeacherShell.resolveIndex('/teacher/homeworks/hw-123'), 2);
+      expect(TeacherShell.resolveIndex('/teacher/exams'), 3);
+      expect(TeacherShell.resolveIndex('/teacher/analytics/stu-1'), 3);
+      expect(TeacherShell.resolveIndex('/teacher/more'), 4);
+
+      expect(ParentShell.resolveIndex('/parent/home'), 0);
+      expect(ParentShell.resolveIndex('/parent/homeworks'), 1);
+      expect(ParentShell.resolveIndex('/parent/exams'), 2);
+      expect(ParentShell.resolveIndex('/parent/messages'), 3);
+      expect(ParentShell.resolveIndex('/parent/profile'), 4);
+    });
+
+    testWidgets(
+        'TeacherHomeScreen modern düzeni taşma veya hata olmadan render eder',
+        (tester) async {
+      tester.view.physicalSize = const Size(375, 812);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final teacher = AppUser(
+        uid: 't-1',
+        role: 'teacher',
+        name: 'Yusuf Karagüzel',
+        email: 'yusuf@example.com',
+        createdAt: DateTime(2026, 11, 22),
+        updatedAt: DateTime(2026, 11, 22),
+      );
+      final classes = [
+        ClassEntity(
+          id: 'c-1',
+          teacherId: 't-1',
+          name: '8-A',
+          gradeLevel: 8,
+          studentCount: 1,
+          createdAt: DateTime(2026, 11, 22),
+        ),
+      ];
+      final homeworks = [
+        HomeworkEntity(
+          id: 'h-1',
+          teacherId: 't-1',
+          classId: 'c-1',
+          title: 'Matematik Test 1',
+          subject: 'Matematik',
+          dueDate: DateTime.now().add(const Duration(days: 2)),
+          createdAt: DateTime(2026, 11, 22),
+        ),
+      ];
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authStateProvider.overrideWith((ref) => Stream.value(teacher)),
+            currentUserProvider.overrideWithValue(teacher),
+            teacherClassesStreamProvider
+                .overrideWith((ref) => Stream.value(classes)),
+            teacherHomeworksStreamProvider
+                .overrideWith((ref) => Stream.value(homeworks)),
+            teacherMessagesStreamProvider
+                .overrideWith((ref) => Stream.value(const <MessageEntity>[])),
+          ],
+          child: const MaterialApp(home: TeacherHomeScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Genel Durum'), findsOneWidget);
+      expect(find.text('Hızlı İşlemler'), findsOneWidget);
+      expect(find.text('Son Ödevler'), findsOneWidget);
+      expect(find.text('Matematik Test 1'), findsOneWidget);
+
+      await tester.scrollUntilVisible(
+        find.text('Çıkış Yap'),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Çıkış Yap'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'ParentHomeScreen modern düzeni taşma veya hata olmadan render eder',
+        (tester) async {
+      tester.view.physicalSize = const Size(375, 812);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final parent = AppUser(
+        uid: 'p-1',
+        role: 'parent',
+        name: 'Ahmet Veli',
+        email: '',
+        phone: '+905321234567',
+        createdAt: DateTime(2026, 11, 22),
+        updatedAt: DateTime(2026, 11, 22),
+      );
+      final student = StudentEntity(
+        id: 's-1',
+        classId: 'c-1',
+        className: '8-A',
+        teacherId: 't-1',
+        name: 'Yusuf',
+        schoolNumber: '104',
+        parentIds: const ['p-1'],
+        createdAt: DateTime(2026, 11, 22),
+      );
+      final assignments = [
+        HomeworkAssignmentEntity(
+          id: 'a-1',
+          homeworkId: 'h-1',
+          studentId: 's-1',
+          classId: 'c-1',
+          teacherId: 't-1',
+          status: 'pending',
+          updatedAt: DateTime(2026, 11, 22),
+        ),
+      ];
+      final exams = [
+        ExamResultEntity(
+          id: 'e-1',
+          studentId: 's-1',
+          classId: 'c-1',
+          teacherId: 't-1',
+          examName: 'Deneme 1',
+          examDate: DateTime(2026, 11, 22),
+          scores: const {},
+          totalNet: 68.5,
+          totalScore: 410,
+          createdAt: DateTime(2026, 11, 22),
+        ),
+      ];
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authStateProvider.overrideWith((ref) => Stream.value(parent)),
+            currentUserProvider.overrideWithValue(parent),
+            parentStudentsStreamProvider('p-1')
+                .overrideWith((ref) => Stream.value([student])),
+            studentAssignmentsStreamProvider('s-1')
+                .overrideWith((ref) => Stream.value(assignments)),
+            studentExamsStreamProvider((studentId: 's-1', teacherId: null))
+                .overrideWith((ref) => Stream.value(exams)),
+            studentGoalStreamProvider((studentId: 's-1', teacherId: null))
+                .overrideWith((ref) => Stream<GoalEntity?>.value(null)),
+            parentMessagesStreamProvider
+                .overrideWith((ref) => Stream.value(const <MessageEntity>[])),
+          ],
+          child: const MaterialApp(home: ParentHomeScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Genel Özet'), findsOneWidget);
+      expect(find.text('Öğretmen Notu'), findsOneWidget);
+      expect(find.text('68.50'), findsOneWidget);
+
+      await tester.scrollUntilVisible(
+        find.text('Çıkış Yap'),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Son Duyuru'), findsOneWidget);
+      expect(find.text('Çıkış Yap'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 

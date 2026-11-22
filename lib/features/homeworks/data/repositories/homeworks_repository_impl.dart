@@ -60,42 +60,40 @@ class HomeworksRepositoryImpl implements HomeworksRepository {
         .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => HomeworkAssignmentModel.fromFirestore(doc))
-            .toList())
-        .handleError((_) => <HomeworkAssignmentEntity>[]);
+            .toList());
   }
 
   @override
   Stream<List<HomeworkAssignmentEntity>> getStudentAssignments(
-      String studentId) async* {
-    if (studentId.isEmpty) {
-      yield const [];
-      return;
-    }
-    try {
-      await for (final snapshot in _assignmentsRef
-          .where('studentId', isEqualTo: studentId)
-          .snapshots()) {
-        final list = snapshot.docs
-            .map((doc) => HomeworkAssignmentModel.fromFirestore(doc))
-            .toList();
-        list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-        yield list;
-      }
-    } catch (_) {
-      yield const [];
-    }
+      String studentId) {
+    if (studentId.isEmpty) return Stream.value(const []);
+    return _assignmentsRef
+        .where('studentId', isEqualTo: studentId)
+        .snapshots()
+        .map((snapshot) {
+      final list = snapshot.docs
+          .map((doc) => HomeworkAssignmentModel.fromFirestore(doc))
+          .toList();
+      list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      return list;
+    });
+  }
+
+  @override
+  Stream<HomeworkEntity?> watchHomeworkById(String homeworkId) {
+    if (homeworkId.isEmpty) return Stream.value(null);
+    return _homeworksRef.doc(homeworkId).snapshots().map((doc) {
+      if (!doc.exists || doc.data() == null) return null;
+      return HomeworkModel.fromFirestore(doc);
+    });
   }
 
   @override
   Future<HomeworkEntity?> getHomeworkById(String homeworkId) async {
-    try {
-      if (homeworkId.isEmpty) return null;
-      final doc = await _homeworksRef.doc(homeworkId).get();
-      if (!doc.exists) return null;
-      return HomeworkModel.fromFirestore(doc);
-    } catch (_) {
-      return null;
-    }
+    if (homeworkId.isEmpty) return null;
+    final doc = await _homeworksRef.doc(homeworkId).get();
+    if (!doc.exists || doc.data() == null) return null;
+    return HomeworkModel.fromFirestore(doc);
   }
 
   @override
@@ -183,6 +181,41 @@ class HomeworksRepositoryImpl implements HomeworksRepository {
     }
 
     await _assignmentsRef.doc(assignmentId).update(updates);
+  }
+
+  @override
+  Future<void> upsertAssignmentStatus({
+    String? assignmentId,
+    required String homeworkId,
+    required String studentId,
+    required String classId,
+    required String teacherId,
+    required String status,
+    String? teacherNote,
+  }) async {
+    if (assignmentId != null && assignmentId.isNotEmpty) {
+      await updateAssignmentStatus(
+        assignmentId: assignmentId,
+        status: status,
+        teacherNote: teacherNote,
+      );
+      return;
+    }
+
+    final now = DateTime.now();
+    final ref = _assignmentsRef.doc();
+    final model = HomeworkAssignmentModel(
+      id: ref.id,
+      homeworkId: homeworkId,
+      studentId: studentId,
+      classId: classId,
+      teacherId: teacherId,
+      status: status,
+      completedAt: status == 'completed' ? now : null,
+      teacherNote: teacherNote,
+      updatedAt: now,
+    );
+    await ref.set(model.toFirestore());
   }
 
   @override

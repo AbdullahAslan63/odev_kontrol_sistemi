@@ -6,6 +6,7 @@ import '../../../../core/theme/app_sizes.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/eduly_logo.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
+import '../../../auth/presentation/providers/phone_auth_provider.dart';
 import '../../../classes/presentation/providers/class_providers.dart';
 import '../../../exams/presentation/providers/exam_providers.dart';
 import '../../../homeworks/presentation/providers/homework_providers.dart';
@@ -14,6 +15,7 @@ import '../../../students/presentation/providers/student_providers.dart';
 import '../../../students/presentation/widgets/parent_child_selector.dart';
 
 /// Veli ana panel ekranı.
+/// Öğretmen paneli ile uyumlu sade ve modern Bento kart tasarımı.
 class ParentHomeScreen extends ConsumerWidget {
   const ParentHomeScreen({super.key});
 
@@ -24,8 +26,9 @@ class ParentHomeScreen extends ConsumerWidget {
     final studentsAsync =
         ref.watch(parentStudentsStreamProvider(user?.uid ?? ''));
     final students = studentsAsync.valueOrNull ?? const [];
-    final activeStudent =
-        students.isNotEmpty ? resolveSelectedParentStudent(ref, students) : null;
+    final activeStudent = students.isNotEmpty
+        ? resolveSelectedParentStudent(ref, students)
+        : null;
 
     final resolvedClassName = activeStudent == null
         ? null
@@ -37,16 +40,16 @@ class ParentHomeScreen extends ConsumerWidget {
 
     final studentName = activeStudent != null
         ? (resolvedClassName != null && resolvedClassName.isNotEmpty
-            ? '${activeStudent.name} ($resolvedClassName Sınıfı)'
+            ? '${activeStudent.name} ($resolvedClassName)'
             : activeStudent.name)
         : (studentsAsync.isLoading
-            ? 'Bağlı Öğrenci Aranıyor...'
+            ? 'Bağlı öğrenci aranıyor...'
             : 'Henüz bağlı öğrenci yok');
 
     final schoolNo = activeStudent?.schoolNumber != null &&
             activeStudent!.schoolNumber!.isNotEmpty
-        ? 'Okul No: ${activeStudent.schoolNumber}'
-        : (activeStudent != null ? 'Kayıtlı Öğrenci' : 'Bağlantı Yok');
+        ? 'No: #${activeStudent.schoolNumber}'
+        : (activeStudent != null ? 'Kayıtlı' : 'Bağlantı Yok');
 
     final greetingName = activeStudent != null
         ? '${activeStudent.name} Velisi'
@@ -58,8 +61,7 @@ class ParentHomeScreen extends ConsumerWidget {
     final assignmentsAsync =
         ref.watch(studentAssignmentsStreamProvider(studentId));
     final assignments = assignmentsAsync.valueOrNull ?? [];
-    final activeHomeworkCount =
-        assignments.where((a) => !a.isCompleted).length;
+    final activeHomeworkCount = assignments.where((a) => !a.isCompleted).length;
     final completedHomeworkCount =
         assignments.where((a) => a.isCompleted).length;
 
@@ -69,7 +71,7 @@ class ParentHomeScreen extends ConsumerWidget {
     final exams = examsAsync.valueOrNull ?? [];
     final lastExam = exams.firstOrNull;
     final lastNetStr =
-        lastExam != null ? lastExam.totalNet.toStringAsFixed(2) : '-';
+        lastExam != null ? lastExam.totalNet.toStringAsFixed(2) : '—';
 
     final goalAsync = ref.watch(
       studentGoalStreamProvider((studentId: studentId, teacherId: null)),
@@ -77,9 +79,12 @@ class ParentHomeScreen extends ConsumerWidget {
     final goal = goalAsync.valueOrNull;
     final goalPercentStr = goal != null
         ? '%${goal.progressPercentage.clamp(0, 100).toStringAsFixed(0)}'
-        : (lastExam != null && activeStudent != null && activeStudent.targetScore > 0 && lastExam.totalScore > 0
+        : (lastExam != null &&
+                activeStudent != null &&
+                activeStudent.targetScore > 0 &&
+                lastExam.totalScore > 0
             ? '%${((lastExam.totalScore / activeStudent.targetScore) * 100).clamp(0, 100).toStringAsFixed(0)}'
-            : '-');
+            : '—');
 
     final teacherNoteText = (activeStudent?.teacherNote != null &&
             activeStudent!.teacherNote!.trim().isNotEmpty)
@@ -90,171 +95,72 @@ class ParentHomeScreen extends ConsumerWidget {
     final messages = messagesAsync.valueOrNull ?? [];
     final latestMessage = messages.firstOrNull;
 
+    final headerChipText = activeStudent != null
+        ? '$studentName • $activeHomeworkCount bekleyen ödev'
+        : 'Öğrenci bağlantısı bekleniyor';
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: CustomScrollView(
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
         slivers: [
-          SliverAppBar(
-            expandedHeight: 156,
-            floating: false,
-            pinned: true,
-            backgroundColor: AppColors.parentPrimary,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [AppColors.parentPrimary, AppColors.parentLight],
-                  ),
-                ),
-                padding: const EdgeInsets.fromLTRB(20, 36, 20, 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Row(
-                      children: [
-                        const EdulyLogo(size: 28),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Eduly',
-                          style: AppTextStyles.h4.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.0,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Merhaba, $greetingName 👋',
-                      style: AppTextStyles.h3.copyWith(color: Colors.white),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Çocuğunuzun güncel durumu aşağıda.',
-                      style: AppTextStyles.bodySmall
-                          .copyWith(color: Colors.white70),
-                    ),
-                  ],
-                ),
-              ),
+          SliverToBoxAdapter(
+            child: _ParentHeroHeader(
+              greetingName: greetingName,
+              chipText: headerChipText,
+              onNotificationTap: () => context.push('/parent/notifications'),
             ),
-            actions: [
-              IconButton(
-                icon: const Icon(
-                  Icons.notifications_outlined,
-                  color: Colors.white,
-                ),
-                onPressed: () => context.push('/parent/notifications'),
-              ),
-              const SizedBox(width: 4),
-            ],
           ),
           SliverPadding(
-            padding: const EdgeInsets.all(AppSizes.pagePadding),
+            padding: const EdgeInsets.fromLTRB(
+              AppSizes.pagePadding,
+              20,
+              AppSizes.pagePadding,
+              28,
+            ),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 if (!studentsAsync.isLoading && activeStudent == null) ...[
                   _LinkStudentBanner(
                     onAdd: () => context.go('/parent/profile'),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 18),
                 ],
                 if (students.length > 1 && activeStudent != null) ...[
                   ParentChildSelectorBar(
                     students: students,
                     activeStudent: activeStudent,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                 ],
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppColors.parentSurface,
-                    borderRadius: BorderRadius.circular(AppSizes.cardRadius),
-                    border: Border.all(
-                      color: AppColors.parentPrimary.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: const BoxDecoration(
-                          color: AppColors.parentPrimary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.face_rounded,
-                          color: Colors.white,
-                          size: 26,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Bağlı Öğrenci Profili',
-                              style: AppTextStyles.labelSmall,
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              studentName,
-                              style: AppTextStyles.h4.copyWith(
-                                color: AppColors.textPrimary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.parentPrimary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          schoolNo,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.parentPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                _StudentSummaryBanner(
+                  studentName: studentName,
+                  badgeText: schoolNo,
                 ),
-                const SizedBox(height: 24),
-                const _ParentSectionTitle('Özet Durumu 📊'),
+                const SizedBox(height: 22),
+                const _ParentSectionTitle('Genel Özet'),
                 const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
-                      child: _ParentSummaryCard(
+                      child: _ParentBentoCard(
                         label: 'Aktif Ödev',
-                        value: '$activeHomeworkCount Ödev',
+                        value: '$activeHomeworkCount',
                         icon: Icons.assignment_rounded,
                         color: AppColors.parentPrimary,
+                        onTap: () => context.go('/parent/homeworks'),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: _ParentSummaryCard(
-                        label: 'Tamamlanan',
-                        value: '$completedHomeworkCount Ödev',
+                      child: _ParentBentoCard(
+                        label: 'Tamamlanan Ödev',
+                        value: '$completedHomeworkCount',
                         icon: Icons.check_circle_rounded,
                         color: AppColors.success,
+                        onTap: () => context.go('/parent/homeworks'),
                       ),
                     ),
                   ],
@@ -263,47 +169,60 @@ class ParentHomeScreen extends ConsumerWidget {
                 Row(
                   children: [
                     Expanded(
-                      child: _ParentSummaryCard(
+                      child: _ParentBentoCard(
                         label: 'Son Deneme Net',
                         value: lastNetStr,
                         icon: Icons.bar_chart_rounded,
                         color: AppColors.accent,
+                        onTap: () => context.go('/parent/exams'),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: _ParentSummaryCard(
+                      child: _ParentBentoCard(
                         label: 'Hedef Başarısı',
                         value: goalPercentStr,
                         icon: Icons.track_changes_rounded,
-                        color: AppColors.warning,
+                        color: AppColors.teacherPrimary,
+                        onTap: () => context.go('/parent/exams'),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 24),
-                const _ParentSectionTitle('Son Öğretmen Notu 📝'),
+                const _ParentSectionTitle('Öğretmen Notu'),
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(AppSizes.cardRadius),
-                    border: Border.all(color: AppColors.border),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: AppColors.border.withValues(alpha: 0.75),
+                    ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x080F172A),
+                        blurRadius: 12,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(10),
+                        width: 42,
+                        height: 42,
                         decoration: BoxDecoration(
                           color:
                               AppColors.teacherPrimary.withValues(alpha: 0.1),
-                          shape: BoxShape.circle,
+                          borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(
                           Icons.sticky_note_2_rounded,
                           color: AppColors.teacherPrimary,
-                          size: 24,
+                          size: 22,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -314,7 +233,7 @@ class ParentHomeScreen extends ConsumerWidget {
                             Text(
                               'Öğretmen Değerlendirmesi',
                               style: AppTextStyles.labelLarge
-                                  .copyWith(fontWeight: FontWeight.bold),
+                                  .copyWith(fontWeight: FontWeight.w700),
                             ),
                             const SizedBox(height: 4),
                             Text(
@@ -329,73 +248,348 @@ class ParentHomeScreen extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
-                const _ParentSectionTitle('Son Duyuru & Bildirimler 🔔'),
+                const _ParentSectionTitle('Son Duyuru'),
                 const SizedBox(height: 12),
-                InkWell(
-                  onTap: () => context.go('/parent/messages'),
-                  borderRadius: BorderRadius.circular(AppSizes.cardRadius),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(AppSizes.cardRadius),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.notifications_active_rounded,
-                          color: AppColors.parentPrimary,
-                          size: 24,
+                Material(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(18),
+                  child: InkWell(
+                    onTap: () => context.go('/parent/messages'),
+                    borderRadius: BorderRadius.circular(18),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: AppColors.border.withValues(alpha: 0.75),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                latestMessage?.title ?? 'Duyuru Paneli',
-                                style: AppTextStyles.labelLarge
-                                    .copyWith(fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                latestMessage?.body ??
-                                    'Henüz yeni bir duyuru veya mesaj bulunmuyor.',
-                                style: AppTextStyles.bodySmall
-                                    .copyWith(color: AppColors.textSecondary),
-                              ),
-                            ],
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x080F172A),
+                            blurRadius: 12,
+                            offset: Offset(0, 4),
                           ),
-                        ),
-                        const Icon(
-                          Icons.chevron_right_rounded,
-                          color: AppColors.textDisabled,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 32),
-                Center(
-                  child: TextButton.icon(
-                    onPressed: () async {
-                      await ref.read(parentAuthProvider.notifier).signOut();
-                      if (context.mounted) context.go('/welcome');
-                    },
-                    icon: const Icon(
-                      Icons.logout_rounded,
-                      color: AppColors.textSecondary,
-                    ),
-                    label: Text(
-                      'Çıkış Yap',
-                      style: AppTextStyles.bodySmall
-                          .copyWith(color: AppColors.textSecondary),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: AppColors.parentPrimary
+                                  .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.campaign_rounded,
+                              color: AppColors.parentPrimary,
+                              size: 22,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  latestMessage?.title ?? 'Duyuru Paneli',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTextStyles.labelLarge
+                                      .copyWith(fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  latestMessage?.body ??
+                                      'Henüz yeni bir duyuru veya mesaj bulunmuyor.',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTextStyles.bodySmall
+                                      .copyWith(color: AppColors.textSecondary),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Icon(
+                            Icons.chevron_right_rounded,
+                            color: AppColors.textDisabled,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 24),
+                Center(
+                  child: TextButton.icon(
+                    onPressed: () async {
+                      ref.read(selectedParentStudentIdProvider.notifier).state =
+                          null;
+                      ref.read(phoneAuthNotifierProvider.notifier).reset();
+                      await ref.read(parentAuthProvider.notifier).signOut();
+                      if (context.mounted) context.go('/welcome');
+                    },
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.textSecondary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                    ),
+                    icon: const Icon(Icons.logout_rounded, size: 18),
+                    label: Text(
+                      'Çıkış Yap',
+                      style: AppTextStyles.labelLarge.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
               ]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ParentHeroHeader extends StatelessWidget {
+  const _ParentHeroHeader({
+    required this.greetingName,
+    required this.chipText,
+    required this.onNotificationTap,
+  });
+
+  final String greetingName;
+  final String chipText;
+  final VoidCallback onNotificationTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF0F766E),
+            AppColors.parentPrimary,
+            AppColors.parentLight,
+          ],
+        ),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -36,
+            top: -28,
+            child: Container(
+              width: 160,
+              height: 160,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.08),
+              ),
+            ),
+          ),
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 22),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const EdulyLogo(size: 22),
+                            const SizedBox(width: 7),
+                            Text(
+                              'Eduly',
+                              style: AppTextStyles.labelLarge.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Spacer(),
+                      Material(
+                        color: Colors.white.withValues(alpha: 0.16),
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          onTap: onNotificationTap,
+                          customBorder: const CircleBorder(),
+                          child: const SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: Icon(
+                              Icons.notifications_none_rounded,
+                              color: Colors.white,
+                              size: 22,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'Merhaba, $greetingName',
+                    style: AppTextStyles.h2.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Çocuğunuzun güncel eğitim durumu burada.',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: Colors.white.withValues(alpha: 0.85),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.22),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.school_rounded,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            chipText,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.labelSmall.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StudentSummaryBanner extends StatelessWidget {
+  const _StudentSummaryBanner({
+    required this.studentName,
+    required this.badgeText,
+  });
+
+  final String studentName;
+  final String badgeText;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: AppColors.parentPrimary.withValues(alpha: 0.25),
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x080F172A),
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: AppColors.parentPrimary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(
+              Icons.face_rounded,
+              color: AppColors.parentPrimary,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Bağlı Öğrenci',
+                  style: AppTextStyles.labelSmall.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  studentName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.h4.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: AppColors.parentPrimary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              badgeText,
+              style: AppTextStyles.labelSmall.copyWith(
+                fontWeight: FontWeight.w700,
+                color: AppColors.parentPrimary,
+              ),
             ),
           ),
         ],
@@ -414,7 +608,7 @@ class _LinkStudentBanner extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.parentPrimary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppSizes.cardRadius),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: AppColors.parentPrimary.withValues(alpha: 0.35),
         ),
@@ -424,14 +618,14 @@ class _LinkStudentBanner extends StatelessWidget {
         children: [
           Text(
             'Öğrenci Bağlantısı Gerekli',
-            style: AppTextStyles.labelLarge
-                .copyWith(fontWeight: FontWeight.bold),
+            style:
+                AppTextStyles.labelLarge.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 6),
           Text(
             'Öğretmenden aldığınız davet kodunu Profil’den girin; çocuğunuzun ödev ve denemeleri burada görünür.',
-            style:
-                AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+            style: AppTextStyles.bodySmall
+                .copyWith(color: AppColors.textSecondary),
           ),
           const SizedBox(height: 12),
           FilledButton.icon(
@@ -454,52 +648,96 @@ class _ParentSectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(title, style: AppTextStyles.h4);
+    return Text(
+      title,
+      style: AppTextStyles.h4.copyWith(
+        fontWeight: FontWeight.w800,
+        color: AppColors.textPrimary,
+      ),
+    );
   }
 }
 
-class _ParentSummaryCard extends StatelessWidget {
-  const _ParentSummaryCard({
+class _ParentBentoCard extends StatelessWidget {
+  const _ParentBentoCard({
     required this.label,
     required this.value,
     required this.icon,
     required this.color,
+    this.onTap,
   });
 
   final String label;
   final String value;
   final IconData icon;
   final Color color;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppSizes.cardRadius),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: AppColors.border.withValues(alpha: 0.75),
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x0A0F172A),
+                blurRadius: 14,
+                offset: Offset(0, 5),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, color: color, size: 20),
-              const Spacer(),
-              Flexible(
-                child: Text(
-                  value,
-                  style: AppTextStyles.h3.copyWith(color: color),
-                  textAlign: TextAlign.right,
-                  overflow: TextOverflow.ellipsis,
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: Icon(icon, color: color, size: 19),
+                  ),
+                  const Spacer(),
+                  Flexible(
+                    child: Text(
+                      value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
+                      style: AppTextStyles.h2.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.labelMedium.copyWith(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          Text(label, style: AppTextStyles.labelMedium),
-        ],
+        ),
       ),
     );
   }

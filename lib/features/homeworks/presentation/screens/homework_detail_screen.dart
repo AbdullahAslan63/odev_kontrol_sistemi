@@ -27,7 +27,13 @@ class HomeworkDetailScreen extends ConsumerWidget {
       body: homeworkAsync.when(
         data: (homework) {
           if (homework == null) {
-            return const Center(child: Text('Ödev bulunamadı.'));
+            return EmptyState(
+              title: 'Ödev Bulunamadı',
+              subtitle: 'Bu ödev silinmiş veya erişilemiyor olabilir.',
+              icon: Icons.assignment_late_outlined,
+              action: () => ref.invalidate(homeworkDetailProvider(homeworkId)),
+              actionLabel: 'Tekrar Dene',
+            );
           }
 
           final studentsAsync = ref.watch(
@@ -163,11 +169,14 @@ class HomeworkDetailScreen extends ConsumerWidget {
                               assignment: assignment,
                               dueDate: homework.dueDate,
                               onStatusChange: (newStatus) async {
-                                if (assignment == null) return;
                                 final ok = await ref
                                     .read(homeworkNotifierProvider.notifier)
-                                    .updateStatus(
-                                      assignmentId: assignment.id,
+                                    .upsertStatus(
+                                      assignmentId: assignment?.id,
+                                      homeworkId: homework.id,
+                                      studentId: student.id,
+                                      classId: homework.classId,
+                                      teacherId: homework.teacherId,
                                       status: newStatus,
                                     );
                                 if (!context.mounted) return;
@@ -184,22 +193,42 @@ class HomeworkDetailScreen extends ConsumerWidget {
                       },
                       loading: () =>
                           const Center(child: CircularProgressIndicator()),
-                      error: (_, __) => const Center(
-                        child: Text('Atama bilgisi bulunamadı.'),
+                      error: (_, __) => ErrorState(
+                        message: 'Atama bilgisi yüklenemedi.',
+                        onRetry: () => ref.invalidate(
+                          homeworkAssignmentsStreamProvider(
+                            (
+                              homeworkId: homeworkId,
+                              teacherId: homework.teacherId,
+                            ),
+                          ),
+                        ),
                       ),
                     );
                   },
                   loading: () =>
                       const Center(child: CircularProgressIndicator()),
-                  error: (_, __) =>
-                      const Center(child: Text('Öğrenci bilgisi bulunamadı.')),
+                  error: (_, __) => ErrorState(
+                    message: 'Öğrenci bilgisi yüklenemedi.',
+                    onRetry: () => ref.invalidate(
+                      classStudentsStreamProvider(
+                        (
+                          classId: homework.classId,
+                          teacherId: homework.teacherId,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ],
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) => const Center(child: Text('Ödev bilgisi bulunamadı.')),
+        error: (_, __) => ErrorState(
+          message: 'Ödev bilgisi yüklenemedi.',
+          onRetry: () => ref.invalidate(homeworkDetailProvider(homeworkId)),
+        ),
       ),
     );
   }

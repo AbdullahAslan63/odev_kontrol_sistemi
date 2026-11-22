@@ -1,8 +1,94 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../domain/entities/app_user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../models/app_user_model.dart';
+
+/// Dış akıştan yeni bir olay geldiğinde önceki iç akış aboneliğini anında iptal eden switchMap yardımcısı.
+Stream<T> switchMapStream<S, T>(
+  Stream<S> source,
+  Stream<T> Function(S value) mapper,
+) {
+  late StreamController<T> controller;
+  StreamSubscription<S>? outerSub;
+  StreamSubscription<T>? innerSub;
+  var outerDone = false;
+  var hasInner = false;
+
+  void maybeClose() {
+    if (outerDone && !hasInner && !controller.isClosed) {
+      controller.close();
+    }
+  }
+
+  controller = StreamController<T>(
+    onListen: () {
+      outerSub = source.listen(
+        (value) {
+          innerSub?.cancel();
+          innerSub = null;
+          hasInner = true;
+
+          late final Stream<T> nextStream;
+          try {
+            nextStream = mapper(value);
+          } catch (e, st) {
+            hasInner = false;
+            if (!controller.isClosed) {
+              controller.addError(e, st);
+            }
+            maybeClose();
+            return;
+          }
+
+          innerSub = nextStream.listen(
+            (data) {
+              if (!controller.isClosed) {
+                controller.add(data);
+              }
+            },
+            onError: (Object error, StackTrace st) {
+              if (!controller.isClosed) {
+                controller.addError(error, st);
+              }
+            },
+            onDone: () {
+              hasInner = false;
+              innerSub = null;
+              maybeClose();
+            },
+          );
+        },
+        onError: (Object error, StackTrace st) {
+          if (!controller.isClosed) {
+            controller.addError(error, st);
+          }
+        },
+        onDone: () {
+          outerDone = true;
+          maybeClose();
+        },
+      );
+    },
+    onPause: () {
+      outerSub?.pause();
+      innerSub?.pause();
+    },
+    onResume: () {
+      outerSub?.resume();
+      innerSub?.resume();
+    },
+    onCancel: () async {
+      await innerSub?.cancel();
+      await outerSub?.cancel();
+      innerSub = null;
+      outerSub = null;
+    },
+  );
+
+  return controller.stream;
+}
 
 /// AuthRepository'nin Firebase implementasyonu.
 class AuthRepositoryImpl implements AuthRepository {
@@ -29,19 +115,36 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Stream<AppUser?> get authStateChanges {
     try {
-      return _auth.authStateChanges().asyncExpand((firebaseUser) {
+      return switchMapStream(_auth.authStateChanges(), (firebaseUser) {
         if (firebaseUser == null) {
           _cachedUser = null;
           return Stream<AppUser?>.value(null);
         }
-        return _users.doc(firebaseUser.uid).snapshots().map((doc) {
-          if (!doc.exists || doc.data() == null) {
-            return null;
-          }
-          final appUser = AppUserModel.fromFirestore(doc.data()!, doc.id);
-          _cachedUser = appUser;
-          return appUser;
-        }).handleError((_) => _cachedUser);
+        return _users.doc(firebaseUser.uid).snapshots().transform(
+          StreamTransformer<DocumentSnapshot<Map<String, dynamic>>,
+              AppUser?>.fromHandlers(
+            handleData: (doc, sink) {
+              if (!doc.exists || doc.data() == null) {
+                _cachedUser = null;
+                sink.add(null);
+                return;
+              }
+              final appUser = AppUserModel.fromFirestore(doc.data()!, doc.id);
+              _cachedUser = appUser;
+              sink.add(appUser);
+            },
+            handleError: (error, st, sink) {
+              if (_auth.currentUser == null) {
+                _cachedUser = null;
+                sink.add(null);
+              } else if (_cachedUser != null) {
+                sink.add(_cachedUser);
+              } else {
+                sink.add(null);
+              }
+            },
+          ),
+        );
       });
     } catch (_) {
       return Stream.value(null);

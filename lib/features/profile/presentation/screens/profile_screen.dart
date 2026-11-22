@@ -742,7 +742,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 icon: Icons.logout_rounded,
                 onPressed: () async {
                   ref.read(activeSessionUserProvider.notifier).state = null;
+                  ref.read(selectedParentStudentIdProvider.notifier).state = null;
                   ref.read(phoneAuthNotifierProvider.notifier).reset();
+                  ref.read(teacherAuthProvider.notifier).clearError();
+                  ref.read(parentAuthProvider.notifier).clearError();
                   await ref.read(authRepositoryProvider).signOut();
                   if (!context.mounted) return;
                   context.go('/welcome');

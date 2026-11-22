@@ -16,7 +16,7 @@ final goalsRepositoryProvider = Provider<GoalsRepository>((ref) {
 
 /// Bir öğrencinin tüm sınav sonuçlarının canlı akışı
 /// Family: (studentId, teacherId?) — teacherId öğretmen paneli için opsiyonel filtre
-final studentExamsStreamProvider = StreamProvider.family<
+final studentExamsStreamProvider = StreamProvider.autoDispose.family<
     List<ExamResultEntity>,
     ({String studentId, String? teacherId})>((ref, params) {
   if (params.studentId.isEmpty) return Stream.value(const []);
@@ -28,7 +28,8 @@ final studentExamsStreamProvider = StreamProvider.family<
 
 /// Bir sınıfın tüm sınav sonuçlarının canlı akışı
 /// Family parametresi: (classId, teacherId) record
-final classExamsStreamProvider = StreamProvider.family<List<ExamResultEntity>,
+final classExamsStreamProvider = StreamProvider.autoDispose.family<
+    List<ExamResultEntity>,
     ({String classId, String teacherId})>((ref, params) {
   return ref
       .watch(examsRepositoryProvider)
@@ -36,7 +37,7 @@ final classExamsStreamProvider = StreamProvider.family<List<ExamResultEntity>,
 });
 
 /// Öğrencinin aktif hedefinin canlı akışı
-final studentGoalStreamProvider = StreamProvider.family<GoalEntity?,
+final studentGoalStreamProvider = StreamProvider.autoDispose.family<GoalEntity?,
     ({String studentId, String? teacherId})>((ref, params) {
   if (params.studentId.isEmpty) return Stream.value(null);
   return ref.watch(goalsRepositoryProvider).getStudentGoal(

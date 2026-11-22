@@ -23,6 +23,9 @@ abstract class HomeworksRepository {
   /// Tek ödev detayını getirme
   Future<HomeworkEntity?> getHomeworkById(String homeworkId);
 
+  /// Tek ödev detayının canlı akışı
+  Stream<HomeworkEntity?> watchHomeworkById(String homeworkId);
+
   /// Yeni ödev oluşturma ve sınıftaki öğrencilere atama
   Future<String> createHomework({
     required HomeworkEntity homework,
@@ -32,6 +35,17 @@ abstract class HomeworksRepository {
   /// Öğrenci ödev durumunu güncelleme (Tamamlandı / Yapılmadı / Bekliyor)
   Future<void> updateAssignmentStatus({
     required String assignmentId,
+    required String status,
+    String? teacherNote,
+  });
+
+  /// Atama yoksa oluşturarak öğrenci ödev durumunu güncelleme
+  Future<void> upsertAssignmentStatus({
+    String? assignmentId,
+    required String homeworkId,
+    required String studentId,
+    required String classId,
+    required String teacherId,
     required String status,
     String? teacherNote,
   });

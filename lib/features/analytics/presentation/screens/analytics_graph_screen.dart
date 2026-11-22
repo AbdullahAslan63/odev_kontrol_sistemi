@@ -48,6 +48,14 @@ class AnalyticsGraphScreen extends ConsumerWidget {
               }
 
               final chronologicalExams = exams.reversed.toList();
+              final isSingleExam = chronologicalExams.length == 1;
+              final nets = chronologicalExams.map((e) => e.totalNet).toList();
+              final minNet = nets.reduce((a, b) => a < b ? a : b);
+              final maxNet = nets.reduce((a, b) => a > b ? a : b);
+              final chartMinY =
+                  (minNet - 10).clamp(0.0, double.infinity).floorToDouble();
+              final rawMaxY = (maxNet + 10).ceilToDouble();
+              final chartMaxY = rawMaxY <= chartMinY ? chartMinY + 20 : rawMaxY;
 
               return SingleChildScrollView(
                 padding: const EdgeInsets.all(AppSizes.pagePadding),
@@ -186,12 +194,46 @@ class AnalyticsGraphScreen extends ConsumerWidget {
                       ),
                       child: LineChart(
                         LineChartData(
+                          minX: isSingleExam ? -0.5 : 0,
+                          maxX: isSingleExam
+                              ? 0.5
+                              : (chronologicalExams.length - 1).toDouble(),
+                          minY: chartMinY,
+                          maxY: chartMaxY,
+                          lineTouchData: LineTouchData(
+                            touchTooltipData: LineTouchTooltipData(
+                              getTooltipItems: (spots) {
+                                return spots.map((spot) {
+                                  final idx = spot.x.round();
+                                  final label = (idx >= 0 &&
+                                          idx < chronologicalExams.length)
+                                      ? chronologicalExams[idx].examName
+                                      : '';
+                                  return LineTooltipItem(
+                                    '$label\n${spot.y.toStringAsFixed(2)} Net',
+                                    const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  );
+                                }).toList();
+                              },
+                            ),
+                          ),
                           gridData: const FlGridData(show: true),
                           titlesData: FlTitlesData(
+                            leftTitles: const AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: 44,
+                              ),
+                            ),
                             bottomTitles: AxisTitles(
                               sideTitles: SideTitles(
                                 showTitles: true,
                                 interval: 1,
+                                reservedSize: 32,
                                 getTitlesWidget: (value, meta) {
                                   if (value != value.roundToDouble()) {
                                     return const SizedBox.shrink();
@@ -199,11 +241,17 @@ class AnalyticsGraphScreen extends ConsumerWidget {
                                   final idx = value.toInt();
                                   if (idx >= 0 &&
                                       idx < chronologicalExams.length) {
-                                    return Padding(
-                                      padding: const EdgeInsets.only(top: 6),
-                                      child: Text(
-                                        chronologicalExams[idx].examName,
-                                        style: const TextStyle(fontSize: 10),
+                                    return SideTitleWidget(
+                                      axisSide: meta.axisSide,
+                                      child: SizedBox(
+                                        width: 68,
+                                        child: Text(
+                                          chronologicalExams[idx].examName,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(fontSize: 10),
+                                        ),
                                       ),
                                     );
                                   }

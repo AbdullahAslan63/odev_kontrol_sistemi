@@ -13,45 +13,43 @@ class ExamsRepositoryImpl implements ExamsRepository {
       _firestore.collection('exam_results');
 
   @override
-  Stream<List<ExamResultEntity>> getStudentExams(String studentId, {String? teacherId}) async* {
+  Stream<List<ExamResultEntity>> getStudentExams(
+    String studentId, {
+    String? teacherId,
+  }) {
     if (studentId.isEmpty) {
-      yield const [];
-      return;
+      return Stream.value(const []);
     }
     Query<Map<String, dynamic>> query =
         _examsRef.where('studentId', isEqualTo: studentId);
     if (teacherId != null && teacherId.isNotEmpty) {
       query = query.where('teacherId', isEqualTo: teacherId);
     }
-    try {
-      await for (final snapshot in query.snapshots()) {
-        final list = snapshot.docs
-            .map((doc) => ExamResultModel.fromFirestore(doc))
-            .toList();
-        list.sort((a, b) => b.examDate.compareTo(a.examDate));
-        yield list;
-      }
-    } catch (_) {
-      yield const [];
-    }
+    return query.snapshots().map((snapshot) {
+      final list =
+          snapshot.docs.map((doc) => ExamResultModel.fromFirestore(doc)).toList();
+      list.sort((a, b) => b.examDate.compareTo(a.examDate));
+      return list;
+    });
   }
 
   @override
-  Stream<List<ExamResultEntity>> getClassExams(String classId, {required String teacherId}) {
-    if (classId.isEmpty) return Stream.value([]);
-    Query<Map<String, dynamic>> query = _examsRef.where('classId', isEqualTo: classId);
+  Stream<List<ExamResultEntity>> getClassExams(
+    String classId, {
+    required String teacherId,
+  }) {
+    if (classId.isEmpty) return Stream.value(const []);
+    Query<Map<String, dynamic>> query =
+        _examsRef.where('classId', isEqualTo: classId);
     if (teacherId.isNotEmpty) {
       query = query.where('teacherId', isEqualTo: teacherId);
     }
-    return query
-        .snapshots()
-        .map((snapshot) {
-      final list = snapshot.docs
-          .map((doc) => ExamResultModel.fromFirestore(doc))
-          .toList();
+    return query.snapshots().map((snapshot) {
+      final list =
+          snapshot.docs.map((doc) => ExamResultModel.fromFirestore(doc)).toList();
       list.sort((a, b) => b.examDate.compareTo(a.examDate));
       return list;
-    }).handleError((_) => <ExamResultEntity>[]);
+    });
   }
 
   @override

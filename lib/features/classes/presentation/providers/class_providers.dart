@@ -19,7 +19,7 @@ final teacherClassesStreamProvider = StreamProvider<List<ClassEntity>>((ref) {
 
 /// Tek bir sınıfı ID ile getiren provider
 final classByIdProvider =
-    FutureProvider.family<ClassEntity?, String>((ref, classId) {
+    FutureProvider.autoDispose.family<ClassEntity?, String>((ref, classId) {
   return ref.watch(classesRepositoryProvider).getClassById(classId);
 });
 
