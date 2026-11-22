@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:odev_takip/core/extensions/extensions.dart';
 import 'package:odev_takip/core/utils/app_utils.dart';
+import 'package:odev_takip/core/utils/phone_number_helper.dart';
+import 'package:odev_takip/features/auth/domain/entities/app_user.dart';
 import 'package:odev_takip/features/auth/presentation/providers/auth_providers.dart';
 import 'package:odev_takip/features/auth/presentation/screens/login_screen.dart';
 import 'package:odev_takip/features/auth/presentation/screens/parent_register_screen.dart';
@@ -12,7 +14,9 @@ import 'package:odev_takip/features/students/domain/entities/student_entity.dart
 
 void main() {
   group('InviteCodeModel & Extensions Tests', () {
-    test('InviteCodeModel studentName, classId ve className alanlarını serileştirir', () {
+    test(
+        'InviteCodeModel studentName, classId ve className alanlarını serileştirir',
+        () {
       final now = DateTime(2026, 11, 22, 12, 0);
       final expiry = now.add(const Duration(days: 14));
       final model = InviteCodeModel(
@@ -41,7 +45,9 @@ void main() {
       expect(parsed.used, false);
     });
 
-    test('InviteCodeGenerator kriptografik OT-XXXXXX formatı üretir ve regex ile eşleşir', () {
+    test(
+        'InviteCodeGenerator kriptografik OT-XXXXXX formatı üretir ve regex ile eşleşir',
+        () {
       final generated = InviteCodeGenerator.generate();
       expect(generated.startsWith('OT-'), true);
       expect(generated.length, 9);
@@ -64,8 +70,59 @@ void main() {
     });
   });
 
+  group('PhoneNumberHelper & Auth Session Tests', () {
+    test('PhoneNumberHelper Türkiye numaralarını E.164 biçimine dönüştürür',
+        () {
+      expect(
+        PhoneNumberHelper.normalizeToE164('05315635049'),
+        '+905315635049',
+      );
+      expect(
+        PhoneNumberHelper.normalizeToE164('531 563 50 49'),
+        '+905315635049',
+      );
+      expect(PhoneNumberHelper.isValidTurkishMobile('05321234567'), isTrue);
+      expect(PhoneNumberHelper.isValidTurkishMobile('12345'), isFalse);
+      expect(
+        PhoneNumberHelper.maskPhoneNumber('+905315635049'),
+        '+90 531 *** ** 49',
+      );
+    });
+
+    test(
+        'currentUserProvider stream beklenmeden activeSessionUserProvider değerini döner',
+        () async {
+      final container = ProviderContainer(
+        overrides: [
+          authStateProvider.overrideWith((ref) => Stream.value(null)),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      expect(container.read(currentUserProvider), isNull);
+
+      final testUser = AppUser(
+        uid: 'uid-1',
+        role: 'parent',
+        name: 'Test Veli',
+        email: '',
+        phone: '+905321234567',
+        createdAt: DateTime(2026, 11, 22),
+        updatedAt: DateTime(2026, 11, 22),
+      );
+
+      container.read(activeSessionUserProvider.notifier).state = testUser;
+      final resolved = container.read(currentUserProvider);
+      expect(resolved, isNotNull);
+      expect(resolved!.uid, 'uid-1');
+      expect(resolved.isParent, isTrue);
+    });
+  });
+
   group('Store Readiness Auth UI Tests', () {
-    testWidgets('LoginScreen e-posta/şifre ister, test telefonu veya sabit kod içermez', (tester) async {
+    testWidgets(
+        'LoginScreen öğretmen için e-posta/şifre, veli için telefon/SMS sunar ve test verisi içermez',
+        (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -80,6 +137,7 @@ void main() {
       expect(find.text('Eduly'), findsOneWidget);
       expect(find.text('E-posta'), findsOneWidget);
       expect(find.text('Şifre'), findsOneWidget);
+      expect(find.text('Öğretmen Girişi Yap'), findsOneWidget);
       expect(find.textContaining('123456'), findsNothing);
       expect(find.textContaining('0531'), findsNothing);
       expect(find.textContaining('Sabit Test Kodu'), findsNothing);
@@ -88,12 +146,17 @@ void main() {
       await tester.tap(find.text('Veli'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Veli Girişi Yap'), findsOneWidget);
+      expect(find.text('Telefon Numarası'), findsOneWidget);
+      expect(find.text('SMS Doğrulama Kodu Gönder'), findsOneWidget);
       expect(find.textContaining('123456'), findsNothing);
       expect(find.textContaining('0531'), findsNothing);
+      expect(find.textContaining('Sabit Test Kodu'), findsNothing);
+      expect(find.textContaining('MatPusula'), findsNothing);
     });
 
-    testWidgets('ParentRegisterScreen test modu içermez ve varsayılan onay kutusu işaretsizdir', (tester) async {
+    testWidgets(
+        'ParentRegisterScreen test modu içermez ve varsayılan onay kutusu işaretsizdir',
+        (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -167,11 +230,13 @@ void main() {
       expect(releaseXcconfig, contains('Generated.xcconfig'));
       expect(infoPlist, contains('<key>ITSAppUsesNonExemptEncryption</key>'));
       expect(infoPlist, contains('<string>Eduly</string>'));
+      expect(infoPlist, contains('app-1-763956808451-ios-4e89567e4767231240b736'));
       expect(infoPlist, isNot(contains('NSCameraUsageDescription')));
       expect(infoPlist, isNot(contains('NSMicrophoneUsageDescription')));
       expect(googlePlist, contains('com.eduly.mobile'));
       expect(googlePlist, contains('eduly-server'));
       expect(privacyManifest, contains('NSPrivacyCollectedDataTypeCrashData'));
+      expect(privacyManifest, contains('NSPrivacyCollectedDataTypePhoneNumber'));
       expect(
         pbxproj,
         matches(RegExp(r'TARGETED_DEVICE_FAMILY\s*=\s*"?1"?\s*;')),

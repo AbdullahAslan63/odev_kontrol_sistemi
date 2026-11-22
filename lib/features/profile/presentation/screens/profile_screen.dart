@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +12,7 @@ import '../../../../core/utils/url_utils.dart';
 import '../../../../core/widgets/app_buttons.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
+import '../../../auth/presentation/providers/phone_auth_provider.dart';
 import '../../../classes/presentation/providers/class_providers.dart';
 import '../../../students/presentation/providers/student_providers.dart';
 
@@ -28,6 +30,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   bool _notificationsEnabled = true;
   bool _homeworkAlertsEnabled = true;
+
+  bool get _hasPasswordProvider {
+    try {
+      final fbUser = FirebaseAuth.instance.currentUser;
+      if (fbUser == null) return false;
+      return fbUser.providerData.any((p) => p.providerId == 'password');
+    } catch (_) {
+      return false;
+    }
+  }
 
   @override
   void initState() {
@@ -68,7 +80,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
               title: const Row(
                 children: [
-                  Icon(Icons.person_add_rounded, color: AppColors.parentPrimary),
+                  Icon(Icons.person_add_rounded,
+                      color: AppColors.parentPrimary),
                   SizedBox(width: 8),
                   Expanded(child: Text('Yeni Öğrenci/Çocuk Ekle')),
                 ],
@@ -146,7 +159,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : const Text('Ekle', style: TextStyle(color: Colors.white)),
+                      : const Text('Ekle',
+                          style: TextStyle(color: Colors.white)),
                 ),
               ],
             );
@@ -343,6 +357,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Future<void> _showDeleteAccountDialog() async {
     final passwordController = TextEditingController();
     final formKey = GlobalKey<FormState>();
+    final requirePassword = _hasPasswordProvider;
     var isDeleting = false;
 
     await showDialog<void>(
@@ -371,20 +386,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     style:
                         TextStyle(fontSize: 13, color: AppColors.textSecondary),
                   ),
-                  const SizedBox(height: 16),
-                  AppTextField(
-                    label: 'Onay İçin Mevcut Şifreniz',
-                    hint: 'Şifrenizi girin',
-                    controller: passwordController,
-                    isPassword: true,
-                    textInputAction: TextInputAction.done,
-                    validator: (v) {
-                      if (v == null || v.isEmpty) {
-                        return 'Devam etmek için mevcut şifrenizi girin.';
-                      }
-                      return null;
-                    },
-                  ),
+                  if (requirePassword) ...[
+                    const SizedBox(height: 16),
+                    AppTextField(
+                      label: 'Onay İçin Mevcut Şifreniz',
+                      hint: 'Şifrenizi girin',
+                      controller: passwordController,
+                      isPassword: true,
+                      textInputAction: TextInputAction.done,
+                      validator: (v) {
+                        if (v == null || v.isEmpty) {
+                          return 'Devam etmek için mevcut şifrenizi girin.';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -405,16 +422,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               onPressed: isDeleting
                   ? null
                   : () async {
-                      if (!formKey.currentState!.validate()) return;
+                      if (requirePassword && !formKey.currentState!.validate()) {
+                        return;
+                      }
                       setDialogState(() => isDeleting = true);
                       try {
                         await ref.read(authRepositoryProvider).deleteAccount(
-                              currentPassword: passwordController.text,
+                              currentPassword: requirePassword
+                                  ? passwordController.text
+                                  : null,
                             );
                         if (!ctx.mounted) return;
                         Navigator.pop(ctx);
                         if (!mounted) return;
-                        context.showSnackBar('Hesabınız kalıcı olarak silindi.');
+                        ref.read(activeSessionUserProvider.notifier).state =
+                            null;
+                        ref.read(phoneAuthNotifierProvider.notifier).reset();
+                        context
+                            .showSnackBar('Hesabınız kalıcı olarak silindi.');
                         context.go('/welcome');
                       } catch (e) {
                         if (ctx.mounted) {
@@ -504,14 +529,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         children: [
                           Text(
                             user?.name ??
-                                (isTeacher
-                                    ? 'Öğretmen Hesabı'
-                                    : 'Veli Hesabı'),
+                                (isTeacher ? 'Öğretmen Hesabı' : 'Veli Hesabı'),
                             style: AppTextStyles.h4,
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            user?.email ?? '',
+                            (user?.email.isNotEmpty ?? false)
+                                ? user!.email
+                                : (user?.phone ?? ''),
                             style: AppTextStyles.bodySmall,
                           ),
                           const SizedBox(height: 8),
@@ -564,8 +589,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       final studentsAsync = ref.watch(
                         parentStudentsStreamProvider(user?.uid ?? ''),
                       );
-                      final students =
-                          studentsAsync.asData?.value ?? const [];
+                      final students = studentsAsync.asData?.value ?? const [];
                       if (studentsAsync.isLoading) {
                         return [
                           const ListTile(
@@ -595,7 +619,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       }
                       return [
                         for (final s in students) ...[
-                          _LinkedStudentTile(studentId: s.id, name: s.name, classId: s.classId, className: s.className, schoolNumber: s.schoolNumber),
+                          _LinkedStudentTile(
+                              studentId: s.id,
+                              name: s.name,
+                              classId: s.classId,
+                              className: s.className,
+                              schoolNumber: s.schoolNumber),
                           const Divider(height: 1),
                         ],
                       ];
@@ -668,13 +697,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
               // ── Güvenlik, Yasal & Destek ─────────────────────────────────
               _buildSettingsGroup('Güvenlik, Yasal & Destek', [
-                _buildSettingsTile(
-                  icon: Icons.lock_outline_rounded,
-                  title: 'Şifre Değiştir',
-                  subtitle: 'Hesap şifrenizi güncelleyin',
-                  onTap: _showChangePasswordDialog,
-                ),
-                const Divider(height: 1),
+                if (_hasPasswordProvider) ...[
+                  _buildSettingsTile(
+                    icon: Icons.lock_outline_rounded,
+                    title: 'Şifre Değiştir',
+                    subtitle: 'Hesap şifrenizi güncelleyin',
+                    onTap: _showChangePasswordDialog,
+                  ),
+                  const Divider(height: 1),
+                ],
                 _buildSettingsTile(
                   icon: Icons.privacy_tip_outlined,
                   title: 'Gizlilik Politikası & KVKK',
@@ -710,6 +741,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 label: 'Güvenli Çıkış Yap',
                 icon: Icons.logout_rounded,
                 onPressed: () async {
+                  ref.read(activeSessionUserProvider.notifier).state = null;
+                  ref.read(phoneAuthNotifierProvider.notifier).reset();
                   await ref.read(authRepositoryProvider).signOut();
                   if (!context.mounted) return;
                   context.go('/welcome');
@@ -789,16 +822,14 @@ class _LinkedStudentTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final resolvedClassName = className ??
-        ref.watch(classByIdProvider(classId)).valueOrNull?.name;
-    final classLabel =
-        resolvedClassName != null && resolvedClassName.isNotEmpty
-            ? '$resolvedClassName Sınıfı'
-            : 'Kayıtlı Öğrenci';
-    final noPart =
-        schoolNumber != null && schoolNumber!.isNotEmpty
-            ? ' • No: $schoolNumber'
-            : '';
+    final resolvedClassName =
+        className ?? ref.watch(classByIdProvider(classId)).valueOrNull?.name;
+    final classLabel = resolvedClassName != null && resolvedClassName.isNotEmpty
+        ? '$resolvedClassName Sınıfı'
+        : 'Kayıtlı Öğrenci';
+    final noPart = schoolNumber != null && schoolNumber!.isNotEmpty
+        ? ' • No: $schoolNumber'
+        : '';
 
     return ListTile(
       leading: const Icon(Icons.face_rounded, color: AppColors.parentPrimary),

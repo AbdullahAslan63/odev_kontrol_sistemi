@@ -48,7 +48,7 @@ class AppUserModel extends AppUser {
 
   static DateTime _parseDateTime(dynamic value) {
     if (value == null) return DateTime.now();
-    if (value is String) return DateTime.parse(value);
+    if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
     // Firestore Timestamp
     try {
       return (value as dynamic).toDate() as DateTime;

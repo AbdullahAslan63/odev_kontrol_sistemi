@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_sizes.dart';
 import '../theme/app_text_styles.dart';
@@ -29,6 +30,7 @@ class AppTextField extends StatefulWidget {
     this.focusNode,
     this.initialValue,
     this.textCapitalization = TextCapitalization.none,
+    this.inputFormatters,
     this.onTap,
     this.helperText,
   });
@@ -54,6 +56,7 @@ class AppTextField extends StatefulWidget {
   final FocusNode? focusNode;
   final String? initialValue;
   final TextCapitalization textCapitalization;
+  final List<TextInputFormatter>? inputFormatters;
   final VoidCallback? onTap;
   final String? helperText;
 
@@ -103,6 +106,7 @@ class _AppTextFieldState extends State<AppTextField> {
           autofocus: widget.autofocus,
           focusNode: widget.focusNode,
           textCapitalization: widget.textCapitalization,
+          inputFormatters: widget.inputFormatters,
           onTap: widget.onTap,
           style: AppTextStyles.inputText,
           decoration: InputDecoration(

@@ -12,15 +12,19 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
 
 // ── Auth state akışı ─────────────────────────────────────────────────────────
 
-/// Mevcut oturum durumu stream'i.
+/// Mevcut oturum durumu stream'i (gerçek zamanlı Firestore users/{uid} dinleyicisi).
 /// null → giriş yok, AppUser → giriş var
 final authStateProvider = StreamProvider<AppUser?>((ref) {
   return ref.watch(authRepositoryProvider).authStateChanges;
 });
 
-/// Mevcut oturum açmış kullanıcı (senkron erişim için)
+/// Giriş/kayıt tamamlandığında yönlendirme yarışını önlemek için senkron aktif kullanıcı.
+final activeSessionUserProvider = StateProvider<AppUser?>((ref) => null);
+
+/// Mevcut oturum açmış kullanıcı (senkron ve reaktif erişim için)
 final currentUserProvider = Provider<AppUser?>((ref) {
-  return ref.watch(authStateProvider).valueOrNull;
+  return ref.watch(authStateProvider).valueOrNull ??
+      ref.watch(activeSessionUserProvider);
 });
 
 // ── Auth işlem durumu ─────────────────────────────────────────────────────────
@@ -57,9 +61,10 @@ class AuthState {
 // ── Öğretmen Auth Notifier ───────────────────────────────────────────────────
 
 class TeacherAuthNotifier extends StateNotifier<AuthState> {
-  TeacherAuthNotifier(this._repo) : super(const AuthState());
+  TeacherAuthNotifier(this._repo, this._ref) : super(const AuthState());
 
   final AuthRepository _repo;
+  final Ref _ref;
 
   Future<void> registerTeacher({
     required String name,
@@ -68,7 +73,12 @@ class TeacherAuthNotifier extends StateNotifier<AuthState> {
   }) async {
     state = state.loading;
     try {
-      await _repo.registerTeacher(name: name, email: email, password: password);
+      final user = await _repo.registerTeacher(
+        name: name,
+        email: email,
+        password: password,
+      );
+      _ref.read(activeSessionUserProvider.notifier).state = user;
       state = state.success;
     } on AuthException catch (e) {
       state = state.error(e.message);
@@ -83,7 +93,11 @@ class TeacherAuthNotifier extends StateNotifier<AuthState> {
   }) async {
     state = state.loading;
     try {
-      await _repo.signInWithEmailAndPassword(email: email, password: password);
+      final user = await _repo.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      _ref.read(activeSessionUserProvider.notifier).state = user;
       state = state.success;
     } on AuthException catch (e) {
       state = state.error(e.message);
@@ -93,6 +107,7 @@ class TeacherAuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> signOut() async {
+    _ref.read(activeSessionUserProvider.notifier).state = null;
     await _repo.signOut();
     state = const AuthState();
   }
@@ -102,15 +117,16 @@ class TeacherAuthNotifier extends StateNotifier<AuthState> {
 
 final teacherAuthProvider =
     StateNotifierProvider<TeacherAuthNotifier, AuthState>((ref) {
-  return TeacherAuthNotifier(ref.watch(authRepositoryProvider));
+  return TeacherAuthNotifier(ref.watch(authRepositoryProvider), ref);
 });
 
 // ── Veli Auth Notifier ───────────────────────────────────────────────────────
 
 class ParentAuthNotifier extends StateNotifier<AuthState> {
-  ParentAuthNotifier(this._repo) : super(const AuthState());
+  ParentAuthNotifier(this._repo, this._ref) : super(const AuthState());
 
   final AuthRepository _repo;
+  final Ref _ref;
 
   /// Davet kodu önizleme bilgisi
   Map<String, dynamic>? inviteCodeData;
@@ -143,17 +159,50 @@ class ParentAuthNotifier extends StateNotifier<AuthState> {
   }) async {
     state = state.loading;
     try {
-      await _repo.registerParent(
+      final user = await _repo.registerParent(
         name: name,
         email: email,
         password: password,
         inviteCode: inviteCode,
       );
+      _ref.read(activeSessionUserProvider.notifier).state = user;
       state = state.success;
     } on AuthException catch (e) {
       state = state.error(e.message);
     } catch (_) {
       state = state.error('Beklenmeyen bir hata oluştu.');
+    }
+  }
+
+  Future<void> registerParentWithPhoneAuth({
+    required String name,
+    required String inviteCode,
+  }) async {
+    state = state.loading;
+    try {
+      final user = await _repo.registerParentWithPhoneAuth(
+        name: name,
+        inviteCode: inviteCode,
+      );
+      _ref.read(activeSessionUserProvider.notifier).state = user;
+      state = state.success;
+    } on AuthException catch (e) {
+      state = state.error(e.message);
+    } catch (_) {
+      state = state.error('Veli kaydı tamamlanırken beklenmeyen bir hata oluştu.');
+    }
+  }
+
+  Future<void> syncParentProfileAfterPhoneAuth() async {
+    state = state.loading;
+    try {
+      final user = await _repo.syncParentProfileAfterPhoneAuth();
+      _ref.read(activeSessionUserProvider.notifier).state = user;
+      state = state.success;
+    } on AuthException catch (e) {
+      state = state.error(e.message);
+    } catch (_) {
+      state = state.error('Veli profili doğrulanırken bir hata oluştu.');
     }
   }
 
@@ -163,7 +212,11 @@ class ParentAuthNotifier extends StateNotifier<AuthState> {
   }) async {
     state = state.loading;
     try {
-      await _repo.signInWithEmailAndPassword(email: email, password: password);
+      final user = await _repo.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      _ref.read(activeSessionUserProvider.notifier).state = user;
       state = state.success;
     } on AuthException catch (e) {
       state = state.error(e.message);
@@ -197,6 +250,7 @@ class ParentAuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> signOut() async {
+    _ref.read(activeSessionUserProvider.notifier).state = null;
     await _repo.signOut();
     state = const AuthState();
   }
@@ -206,7 +260,7 @@ class ParentAuthNotifier extends StateNotifier<AuthState> {
 
 final parentAuthProvider =
     StateNotifierProvider<ParentAuthNotifier, AuthState>((ref) {
-  return ParentAuthNotifier(ref.watch(authRepositoryProvider));
+  return ParentAuthNotifier(ref.watch(authRepositoryProvider), ref);
 });
 
 // ── Şifre sıfırlama notifier ─────────────────────────────────────────────────

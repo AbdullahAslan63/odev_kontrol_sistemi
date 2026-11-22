@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
@@ -7,13 +8,15 @@ import '../../../../core/extensions/extensions.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_sizes.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/utils/phone_number_helper.dart';
 import '../../../../core/utils/url_utils.dart';
 import '../../../../core/widgets/app_buttons.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../../../core/widgets/step_progress_indicator.dart';
 import '../providers/auth_providers.dart';
+import '../providers/phone_auth_provider.dart';
 
-/// Veli Kayıt Ekranı — 3 Adımlı Wizard (Davet Kodu → Kişisel Bilgiler → Şifre & Onay)
+/// Veli Kayıt Ekranı — 3 Adımlı Wizard (Davet Kodu → Telefon Numarası → SMS Doğrulama & Onay)
 class ParentRegisterScreen extends ConsumerStatefulWidget {
   const ParentRegisterScreen({super.key});
 
@@ -28,15 +31,14 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
   // Step 0: Davet Kodu
   final _codeController = TextEditingController();
 
-  // Step 1: Ad Soyad & E-posta
+  // Step 1: Ad Soyad & Cep Telefonu
   final _step1FormKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
 
-  // Step 2: Şifre & Koşullar
+  // Step 2: SMS Doğrulama & Koşullar
   final _step2FormKey = GlobalKey<FormState>();
-  final _passwordController = TextEditingController();
-  final _passwordConfirmController = TextEditingController();
+  final _otpController = TextEditingController();
   bool _termsAccepted = false;
 
   String? _validatedCode;
@@ -47,9 +49,8 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
   void dispose() {
     _codeController.dispose();
     _nameController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
-    _passwordConfirmController.dispose();
+    _phoneController.dispose();
+    _otpController.dispose();
     super.dispose();
   }
 
@@ -66,8 +67,8 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
 
     if (!mounted) return;
     if (isValid) {
-      _validatedCode = code;
       final data = notifier.inviteCodeData;
+      _validatedCode = data?['code'] as String? ?? code;
       _studentName = data?['studentName'] as String?;
       _className = data?['className'] as String?;
       setState(() => _currentStep = 1);
@@ -80,33 +81,84 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
     }
   }
 
-  void _nextFromStep1() {
+  Future<void> _sendSmsOtp() async {
     context.unfocus();
     if (!_step1FormKey.currentState!.validate()) return;
-    setState(() => _currentStep = 2);
+
+    final rawPhone = _phoneController.text.trim();
+    if (!PhoneNumberHelper.isValidTurkishMobile(rawPhone) &&
+        !PhoneNumberHelper.isValidE164(rawPhone)) {
+      context.showSnackBar(
+        'Lütfen 05XX XXX XX XX biçiminde geçerli bir cep telefonu numarası girin.',
+        isError: true,
+      );
+      return;
+    }
+
+    final success = await ref
+        .read(phoneAuthNotifierProvider.notifier)
+        .sendCode(rawPhone);
+    if (!mounted) return;
+
+    final phoneState = ref.read(phoneAuthNotifierProvider);
+    if (success ||
+        phoneState.authState is PhoneAuthCodeSent ||
+        phoneState.authState is PhoneAuthSignedIn) {
+      setState(() => _currentStep = 2);
+    } else if (phoneState.authState is PhoneAuthError) {
+      context.showSnackBar(
+        (phoneState.authState as PhoneAuthError).userMessage,
+        isError: true,
+      );
+    }
   }
 
   void _prevStep() {
     context.unfocus();
-    if (_currentStep > 0) {
+    if (_currentStep == 2) {
+      _otpController.clear();
+      ref.read(phoneAuthNotifierProvider.notifier).reset();
+      setState(() => _currentStep = 1);
+    } else if (_currentStep > 0) {
       setState(() => _currentStep--);
     } else {
       context.pop();
     }
   }
 
-  Future<void> _submitRegistration() async {
+  Future<void> _verifyAndRegister() async {
     context.unfocus();
-    if (!_step2FormKey.currentState!.validate()) return;
     if (!_termsAccepted) {
       context.showSnackBar(AppStrings.errorTermsRequired, isError: true);
       return;
     }
+    if (_validatedCode == null) {
+      context.showSnackBar('Davet kodu geçersiz. İlk adıma dönün.',
+          isError: true);
+      setState(() => _currentStep = 0);
+      return;
+    }
 
-    await ref.read(parentAuthProvider.notifier).registerParent(
+    final phoneState = ref.read(phoneAuthNotifierProvider);
+    if (phoneState.authState is! PhoneAuthSignedIn) {
+      if (!_step2FormKey.currentState!.validate()) return;
+
+      final verified = await ref
+          .read(phoneAuthNotifierProvider.notifier)
+          .verifyCode(_otpController.text.trim());
+      if (!mounted) return;
+
+      if (!verified) {
+        final err = ref.read(phoneAuthNotifierProvider).authState;
+        if (err is PhoneAuthError) {
+          context.showSnackBar(err.userMessage, isError: true);
+        }
+        return;
+      }
+    }
+
+    await ref.read(parentAuthProvider.notifier).registerParentWithPhoneAuth(
           name: _nameController.text.trim(),
-          email: _emailController.text.trim(),
-          password: _passwordController.text,
           inviteCode: _validatedCode!,
         );
 
@@ -150,8 +202,8 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
                 totalSteps: 3,
                 stepTitles: const [
                   'Davet Kodu',
-                  'Kişisel Bilgiler',
-                  'Güvenlik & Onay',
+                  'Telefon Bilgisi',
+                  'SMS Doğrulama',
                 ],
                 primaryColor: AppColors.parentPrimary,
               ),
@@ -232,8 +284,11 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
     );
   }
 
-  // ── Adım 2: Ad Soyad & E-posta ───────────────────────────────────────────
+  // ── Adım 2: Ad Soyad & Cep Telefonu ───────────────────────────────────────
   Widget _buildStep1() {
+    final phoneAuth = ref.watch(phoneAuthNotifierProvider).authState;
+    final isSending = phoneAuth is PhoneAuthSending;
+
     return Form(
       key: _step1FormKey,
       child: Column(
@@ -299,7 +354,7 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
           Text('2. Veli Bilgileri', style: AppTextStyles.h3),
           const SizedBox(height: 6),
           Text(
-            'Hesabınız için ad soyad ve e-posta adresinizi girin.',
+            'Ad soyadınızı ve SMS doğrulaması için cep telefonu numaranızı girin.',
             style: AppTextStyles.bodyMedium,
           ),
           const SizedBox(height: 24),
@@ -322,22 +377,23 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
           ),
           const SizedBox(height: AppSizes.itemSpacing),
           AppTextField(
-            label: AppStrings.email,
-            hint: 'veli@eposta.com',
-            controller: _emailController,
+            label: 'Telefon Numarası',
+            hint: '05XX XXX XX XX',
+            controller: _phoneController,
             prefixIcon: const Icon(
-              Icons.email_outlined,
+              Icons.phone_android_rounded,
               color: AppColors.textSecondary,
             ),
-            keyboardType: TextInputType.emailAddress,
+            keyboardType: TextInputType.phone,
             textInputAction: TextInputAction.done,
-            onFieldSubmitted: (_) => _nextFromStep1(),
+            onFieldSubmitted: (_) => _sendSmsOtp(),
             validator: (v) {
               if (v == null || v.trim().isEmpty) {
-                return AppStrings.errorEmailRequired;
+                return 'Telefon numarası zorunludur.';
               }
-              if (!v.trim().isValidEmail) {
-                return AppStrings.errorEmailInvalid;
+              if (!PhoneNumberHelper.isValidTurkishMobile(v.trim()) &&
+                  !PhoneNumberHelper.isValidE164(v.trim())) {
+                return 'Lütfen 05XX XXX XX XX biçiminde geçerli bir numara girin.';
               }
               return null;
             },
@@ -348,15 +404,16 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
               Expanded(
                 child: SecondaryButton(
                   label: '← Değiştir',
-                  onPressed: _prevStep,
+                  onPressed: isSending ? null : _prevStep,
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 flex: 2,
                 child: PrimaryButton(
-                  label: 'Devam Et ➔',
-                  onPressed: _nextFromStep1,
+                  label: 'SMS Kodu Gönder ➔',
+                  onPressed: _sendSmsOtp,
+                  isLoading: isSending,
                   backgroundColor: AppColors.parentPrimary,
                 ),
               ),
@@ -367,9 +424,19 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
     );
   }
 
-  // ── Adım 3: Şifre & Onay ─────────────────────────────────────────────────
+  // ── Adım 3: SMS Doğrulama & Onay ──────────────────────────────────────────
   Widget _buildStep2() {
     final authState = ref.watch(parentAuthProvider);
+    final phoneUiState = ref.watch(phoneAuthNotifierProvider);
+    final phoneAuth = phoneUiState.authState;
+    final isSignedIn = phoneAuth is PhoneAuthSignedIn;
+    final isBusy = authState.isLoading ||
+        phoneAuth is PhoneAuthVerifying ||
+        phoneAuth is PhoneAuthSending;
+
+    final masked = phoneAuth is PhoneAuthCodeSent
+        ? phoneAuth.maskedPhone
+        : PhoneNumberHelper.maskPhoneNumber(_phoneController.text.trim());
 
     return Form(
       key: _step2FormKey,
@@ -377,51 +444,80 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
         key: const ValueKey(2),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('3. Güvenlik & Şifre', style: AppTextStyles.h3),
+          Text('3. SMS Doğrulama & Onay', style: AppTextStyles.h3),
           const SizedBox(height: 6),
-          Text(
-            'Hesabınız için en az 8 karakterli bir şifre belirleyin.',
-            style: AppTextStyles.bodyMedium,
-          ),
-          const SizedBox(height: 24),
-          AppTextField(
-            label: AppStrings.password,
-            hint: 'En az 8 karakter',
-            controller: _passwordController,
-            isPassword: true,
-            prefixIcon: const Icon(
-              Icons.lock_outline_rounded,
-              color: AppColors.textSecondary,
+          if (isSignedIn) ...[
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(top: 12),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.successLight,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.verified_rounded, color: AppColors.success),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Telefon numaranız doğrulandı. Koşulları onaylayarak kaydınızı tamamlayabilirsiniz.',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            textInputAction: TextInputAction.next,
-            validator: (v) {
-              if (v == null || v.isEmpty) {
-                return AppStrings.errorPasswordRequired;
-              }
-              if (!v.isValidPassword) {
-                return AppStrings.errorPasswordMin;
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: AppSizes.itemSpacing),
-          AppTextField(
-            label: AppStrings.passwordConfirm,
-            hint: 'Şifrenizi tekrar girin',
-            controller: _passwordConfirmController,
-            isPassword: true,
-            prefixIcon: const Icon(
-              Icons.lock_outline_rounded,
-              color: AppColors.textSecondary,
+          ] else ...[
+            Text(
+              '$masked numarasına gelen 6 haneli SMS kodunu girin.',
+              style: AppTextStyles.bodyMedium,
             ),
-            textInputAction: TextInputAction.done,
-            validator: (v) {
-              if (v != _passwordController.text) {
-                return AppStrings.errorPasswordMatch;
-              }
-              return null;
-            },
-          ),
+            const SizedBox(height: 24),
+            AppTextField(
+              label: 'SMS Doğrulama Kodu',
+              hint: '6 haneli kod',
+              controller: _otpController,
+              prefixIcon: const Icon(
+                Icons.pin_outlined,
+                color: AppColors.parentPrimary,
+              ),
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => _verifyAndRegister(),
+              validator: (v) {
+                final clean = v?.trim() ?? '';
+                if (clean.length != 6) {
+                  return 'Lütfen 6 haneli SMS doğrulama kodunu girin.';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: (isBusy || !phoneUiState.canResend)
+                    ? null
+                    : () => ref
+                        .read(phoneAuthNotifierProvider.notifier)
+                        .resendCode(),
+                child: Text(
+                  phoneUiState.canResend
+                      ? 'Kodu Tekrar Gönder'
+                      : 'Tekrar gönder (${phoneUiState.cooldownSeconds} sn)',
+                  style: TextStyle(
+                    color: phoneUiState.canResend
+                        ? AppColors.parentPrimary
+                        : AppColors.textDisabled,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           Row(
             children: [
@@ -474,7 +570,7 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
               Expanded(
                 child: SecondaryButton(
                   label: '← Geri',
-                  onPressed: _prevStep,
+                  onPressed: isBusy ? null : _prevStep,
                 ),
               ),
               const SizedBox(width: 12),
@@ -482,8 +578,8 @@ class _ParentRegisterScreenState extends ConsumerState<ParentRegisterScreen> {
                 flex: 2,
                 child: PrimaryButton(
                   label: 'Kaydı Tamamla',
-                  onPressed: _submitRegistration,
-                  isLoading: authState.isLoading,
+                  onPressed: _verifyAndRegister,
+                  isLoading: isBusy,
                   backgroundColor: AppColors.parentPrimary,
                 ),
               ),

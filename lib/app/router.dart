@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,7 +38,19 @@ class _RouterRefreshNotifier extends ChangeNotifier {
 /// GoRouter ile rol tabanlı yönlendirme ve tek örnekte refreshListenable.
 final routerProvider = Provider<GoRouter>((ref) {
   final refreshNotifier = _RouterRefreshNotifier();
-  ref.listen(authStateProvider, (_, __) => refreshNotifier.notify());
+  ref.listen(authStateProvider, (_, next) {
+    if (!next.isLoading && next.valueOrNull == null) {
+      bool hasFirebaseUser = false;
+      try {
+        hasFirebaseUser = FirebaseAuth.instance.currentUser != null;
+      } catch (_) {}
+      if (!hasFirebaseUser) {
+        ref.read(activeSessionUserProvider.notifier).state = null;
+      }
+    }
+    refreshNotifier.notify();
+  });
+  ref.listen(activeSessionUserProvider, (_, __) => refreshNotifier.notify());
   ref.onDispose(refreshNotifier.dispose);
 
   final router = GoRouter(
@@ -46,9 +59,10 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: refreshNotifier,
     redirect: (context, state) {
       final authState = ref.read(authStateProvider);
-      final user = authState.valueOrNull;
+      final user =
+          authState.valueOrNull ?? ref.read(activeSessionUserProvider);
       final isLoggedIn = user != null;
-      final isLoading = authState.isLoading;
+      final isLoading = authState.isLoading && !isLoggedIn;
 
       if (isLoading) return null;
 
